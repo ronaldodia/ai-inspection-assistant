@@ -13,7 +13,7 @@ class TokenResponse(BaseModel):
 
 class CreateInspectionRequest(BaseModel):
     address: str
-    inspection_type: str
+    inspection_type: str = "general"
     notes: str | None = None
     lat: float | None = None
     lon: float | None = None

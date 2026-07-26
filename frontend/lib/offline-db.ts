@@ -5,6 +5,7 @@ export interface PendingPhoto {
   inspectionId: string
   blob: Blob
   photoOrder: number
+  sectionType: string
   lat: number | null
   lon: number | null
   takenAt: string

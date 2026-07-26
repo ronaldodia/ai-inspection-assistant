@@ -28,6 +28,7 @@ CREATE TABLE photos (
     inspection_id UUID NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
     client_photo_id VARCHAR(100) NOT NULL,
     storage_path VARCHAR(500) NOT NULL,
+    section_type VARCHAR(50) NOT NULL DEFAULT 'autre',
     photo_order INT NOT NULL,
     lat DECIMAL(10, 8),
     lon DECIMAL(11, 8),

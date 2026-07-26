@@ -4,6 +4,7 @@ import json
 import anthropic
 
 from app.config import settings
+from app.constants import section_label
 
 _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
@@ -63,7 +64,7 @@ priorité, et termine par une recommandation générale. N'invente rien au-delà
 anomalies fournies."""
 
 
-def analyze_photo(image_bytes: bytes, media_type: str, inspection_type: str) -> dict:
+def analyze_photo(image_bytes: bytes, media_type: str, section_type: str) -> dict:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     response = _client.messages.create(
         model="claude-opus-5",
@@ -86,7 +87,7 @@ def analyze_photo(image_bytes: bytes, media_type: str, inspection_type: str) -> 
                     },
                     {
                         "type": "text",
-                        "text": f"Type d'inspection : {inspection_type}. Analyse cette photo.",
+                        "text": f"Section du bâtiment inspectée : {section_label(section_type)}. Analyse cette photo.",
                     },
                 ],
             }
@@ -110,7 +111,8 @@ def analyze_photo(image_bytes: bytes, media_type: str, inspection_type: str) -> 
     return result
 
 
-def synthesize_report(address: str, inspection_type: str, all_anomalies: list[dict]) -> str:
+def synthesize_report(address: str, section_types: list[str], all_anomalies: list[dict]) -> str:
+    sections_summary = ", ".join(dict.fromkeys(section_label(s) for s in section_types)) or "non précisée"
     response = _client.messages.create(
         model="claude-opus-5",
         max_tokens=2048,
@@ -121,7 +123,7 @@ def synthesize_report(address: str, inspection_type: str, all_anomalies: list[di
             {
                 "role": "user",
                 "content": (
-                    f"Adresse : {address}\nType d'inspection : {inspection_type}\n\n"
+                    f"Adresse : {address}\nSections inspectées : {sections_summary}\n\n"
                     f"Anomalies détectées (JSON) :\n{json.dumps(all_anomalies, ensure_ascii=False)}"
                 ),
             }

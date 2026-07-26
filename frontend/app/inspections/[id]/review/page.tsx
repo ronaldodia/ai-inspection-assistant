@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
+import { sectionLabel } from '@/lib/sections'
 
 interface Anomaly {
   type: string
@@ -15,6 +16,7 @@ interface Anomaly {
 
 interface Photo {
   id: string
+  section_type: string
   anomalies: Anomaly[] | null
   overall_condition: string | null
 }
@@ -193,6 +195,9 @@ function PhotoReviewCard({
           <img src={imgSrc} alt="" className="w-24 h-24 object-cover rounded flex-shrink-0" />
         )}
         <div className="flex-1">
+          <span className="inline-block text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 rounded px-1.5 py-0.5 mb-2">
+            {sectionLabel(photo.section_type)}
+          </span>
           <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
           <select
             value={condition}

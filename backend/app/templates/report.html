@@ -19,6 +19,8 @@
   .sev-mineure { color: #a16207; }
   .finding .type { font-weight: 600; margin: 2px 0 6px; }
   .finding p { margin: 4px 0; }
+  .photo-block { margin-bottom: 1.2em; page-break-inside: avoid; }
+  .photo-block img { max-width: 100%; max-height: 320px; border-radius: 6px; display: block; margin-bottom: 8px; }
   .footer { margin-top: 2em; font-size: 8pt; color: #a8a29e; }
 </style>
 </head>
@@ -26,7 +28,6 @@
   <h1>Rapport d'inspection</h1>
   <div class="meta">
     {{ inspection.address }}<br>
-    Type d'inspection : {{ inspection.inspection_type }}<br>
     Date : {{ inspection.completed_at.strftime('%Y-%m-%d') if inspection.completed_at else '' }}
   </div>
 
@@ -39,16 +40,24 @@
   <h2>Synthèse</h2>
   <div class="synthesis">{{ synthesis }}</div>
 
-  <h2>Anomalies détectées ({{ findings|length }})</h2>
-  {% for f in findings %}
-  <div class="finding">
-    <div class="sev sev-{{ f.severity }}">{{ severity_labels.get(f.severity, f.severity) }}</div>
-    <div class="type">{{ f.type }} — {{ f.location }}</div>
-    <p>{{ f.description }}</p>
-    <p><strong>Recommandation :</strong> {{ f.recommendation }}</p>
+  <h2>Anomalies détectées ({{ findings_count }})</h2>
+  {% for section in sections %}
+  <h2>{{ section.label }}</h2>
+  {% for photo in section.photos %}
+  <div class="photo-block">
+    {% if photo.image %}<img src="{{ photo.image }}" alt="">{% endif %}
+    {% for f in photo.anomalies %}
+    <div class="finding">
+      <div class="sev sev-{{ f.severity }}">{{ severity_labels.get(f.severity, f.severity) }}</div>
+      <div class="type">{{ f.type }} — {{ f.location }}</div>
+      <p>{{ f.description }}</p>
+      <p><strong>Recommandation :</strong> {{ f.recommendation }}</p>
+    </div>
+    {% else %}
+    <p>Aucune anomalie détectée sur cette photo.</p>
+    {% endfor %}
   </div>
-  {% else %}
-  <p>Aucune anomalie détectée.</p>
+  {% endfor %}
   {% endfor %}
 
   <div class="footer">

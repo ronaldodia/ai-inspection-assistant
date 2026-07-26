@@ -26,7 +26,7 @@ def claim_next_inspection(conn: psycopg.Connection) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, address, inspection_type
+            SELECT id, address
             FROM inspections
             WHERE status = 'QUEUED'
             ORDER BY created_at
@@ -48,7 +48,7 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, storage_path FROM photos WHERE inspection_id = %s ORDER BY photo_order",
+            "SELECT id, storage_path, section_type FROM photos WHERE inspection_id = %s ORDER BY photo_order",
             (inspection_id,),
         )
         photos = cur.fetchall()
@@ -57,6 +57,7 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
         raise RuntimeError("Aucune photo à analyser")
 
     all_anomalies: list[dict] = []
+    section_types: list[str] = []
 
     for photo in photos:
         abs_path = os.path.join(settings.photos_dir, photo["storage_path"])
@@ -66,7 +67,8 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
         with open(abs_path, "rb") as f:
             image_bytes = f.read()
 
-        result = analyze_photo(image_bytes, media_type, inspection["inspection_type"])
+        section_types.append(photo["section_type"])
+        result = analyze_photo(image_bytes, media_type, photo["section_type"])
         usage = result.pop("_usage")
         all_anomalies.extend(result["anomalies"])
 
@@ -95,7 +97,7 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
             )
         conn.commit()
 
-    synthesis = synthesize_report(inspection["address"], inspection["inspection_type"], all_anomalies)
+    synthesis = synthesize_report(inspection["address"], section_types, all_anomalies)
 
     with conn.cursor() as cur:
         cur.execute(

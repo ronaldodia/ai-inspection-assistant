@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { compressImage } from '@/lib/compress-image'
+import { SECTION_TYPES, sectionLabel } from '@/lib/sections'
 import {
   deletePhoto,
   getAllPhotosForInspection,
@@ -21,6 +22,7 @@ export default function CapturePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [photos, setPhotos] = useState<PendingPhoto[]>([])
+  const [section, setSection] = useState(SECTION_TYPES[0][0])
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [syncing, setSyncing] = useState(false)
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -58,6 +60,7 @@ export default function CapturePage() {
         formData.append('file', p.blob, `${p.clientPhotoId}.jpg`)
         formData.append('client_photo_id', p.clientPhotoId)
         formData.append('photo_order', String(p.photoOrder))
+        formData.append('section_type', p.sectionType)
         if (p.lat != null) formData.append('lat', String(p.lat))
         if (p.lon != null) formData.append('lon', String(p.lon))
         if (p.takenAt) formData.append('taken_at', p.takenAt)
@@ -102,6 +105,7 @@ export default function CapturePage() {
           inspectionId,
           blob,
           photoOrder: startOrder + index,
+          sectionType: section,
           lat: null,
           lon: null,
           takenAt: new Date().toISOString(),
@@ -167,6 +171,29 @@ export default function CapturePage() {
           {pendingCount > 0 && ` — ${pendingCount} en attente de synchronisation`}
         </p>
 
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-2">Section en cours</label>
+          <div className="flex gap-2">
+            {SECTION_TYPES.map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                onClick={() => setSection(value)}
+                className={`flex-1 rounded border px-3 py-2 text-sm ${
+                  section === value
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-stone-300 text-stone-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-stone-500 mt-1">
+            Les photos ajoutées ci-dessous seront associées à cette section.
+          </p>
+        </div>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -197,6 +224,9 @@ export default function CapturePage() {
                   className="w-full h-full object-cover rounded"
                 />
               )}
+              <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                {sectionLabel(p.sectionType)}
+              </span>
               {!p.uploaded && (
                 <span className="absolute top-1 left-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded">
                   En attente

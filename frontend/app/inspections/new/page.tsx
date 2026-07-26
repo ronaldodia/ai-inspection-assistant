@@ -20,7 +20,6 @@ export default function NewInspectionPage() {
   const token = useRequireAuth()
   const router = useRouter()
   const [address, setAddress] = useState('')
-  const [type, setType] = useState('comble')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,7 +32,6 @@ export default function NewInspectionPage() {
       const { lat, lon } = await getLocation()
       const inspection = await api.createInspection({
         address,
-        inspection_type: type,
         notes,
         lat,
         lon,
@@ -63,29 +61,10 @@ export default function NewInspectionPage() {
               className="w-full rounded border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-stone-700 mb-2">Type d&apos;inspection</label>
-            <div className="flex gap-2">
-              {[
-                ['comble', 'Comble'],
-                ['vide_sanitaire', 'Vide sanitaire'],
-                ['autre', 'Autre'],
-              ].map(([value, label]) => (
-                <button
-                  type="button"
-                  key={value}
-                  onClick={() => setType(value)}
-                  className={`flex-1 rounded border px-3 py-2 text-sm ${
-                    type === value
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-stone-300 text-stone-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="text-xs text-stone-500">
+            Vous pourrez répartir les photos entre plusieurs sections du bâtiment (comble, vide
+            sanitaire, etc.) à l&apos;étape suivante.
+          </p>
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-1">Notes (optionnel)</label>
             <textarea
