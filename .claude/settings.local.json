@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(docker compose *)",
+      "Bash(groups; ls *)",
+      "Read(//run/**)",
+      "Bash(sudo -n docker compose -f /home/edia/Desktop/codes/inspection-assiste/docker-compose.yml ps -a)",
+      "Bash(cat /etc/hosts)",
+      "Read(//etc/**)",
+      "Bash(curl -sv -o /dev/null http://localhost:3000)",
+      "Bash(curl -sv -o /dev/null http://127.0.0.1:3000)",
+      "Bash(getent ahosts *)",
+      "Bash(curl -sv -o /dev/null http://localhost:8000/health)",
+      "Bash(curl -sv -o /dev/null http://127.0.0.1:8000/health)"
+    ]
+  }
+}

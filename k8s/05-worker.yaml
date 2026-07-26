@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: inspect-ia
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: localhost:32000/inspect-ia-backend:latest
+          command: ["python", "-m", "worker.worker"]
+          envFrom:
+            - secretRef:
+                name: inspect-ia-secrets
+          env:
+            - name: PHOTOS_DIR
+              value: /data/photos
+            - name: REPORTS_DIR
+              value: /data/reports
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: inspect-data

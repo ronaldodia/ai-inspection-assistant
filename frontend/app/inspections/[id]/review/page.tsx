@@ -1,0 +1,262 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { useRequireAuth } from '@/lib/useRequireAuth'
+import { api } from '@/lib/api'
+
+interface Anomaly {
+  type: string
+  severity: string
+  location: string
+  description: string
+  recommendation: string
+}
+
+interface Photo {
+  id: string
+  anomalies: Anomaly[] | null
+  overall_condition: string | null
+}
+
+interface InspectionDetail {
+  inspection: { id: string; address: string; status: string }
+  photos: Photo[]
+  report: { synthesis: string | null } | null
+}
+
+const SEVERITIES = ['mineure', 'majeure', 'critique']
+
+export default function ReviewPage() {
+  const token = useRequireAuth()
+  const params = useParams<{ id: string }>()
+  const router = useRouter()
+  const [data, setData] = useState<InspectionDetail | null>(null)
+  const [synthesis, setSynthesis] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!token) return
+    api.getInspection(params.id).then((d: InspectionDetail) => {
+      setData(d)
+      setSynthesis(d.report?.synthesis ?? '')
+    })
+  }, [token, params.id])
+
+  function updatePhotoAnomalies(photoId: string, anomalies: Anomaly[], overallCondition: string) {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            photos: prev.photos.map((p) =>
+              p.id === photoId ? { ...p, anomalies, overall_condition: overallCondition } : p
+            ),
+          }
+        : prev
+    )
+  }
+
+  async function saveAll() {
+    if (!data) return
+    setSaving(true)
+    setError(null)
+    try {
+      for (const photo of data.photos) {
+        await api.updateAnomaly(params.id, photo.id, {
+          anomalies: photo.anomalies ?? [],
+          overall_condition: photo.overall_condition ?? 'bon',
+        })
+      }
+      await api.updateSynthesis(params.id, synthesis)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur de sauvegarde')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleFinalize() {
+    setError(null)
+    try {
+      await saveAll()
+      await api.finalize(params.id)
+      router.push(`/inspections/${params.id}/report`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la finalisation')
+    }
+  }
+
+  if (!token || !data) return null
+
+  return (
+    <div className="min-h-screen bg-stone-50 pb-24">
+      <header className="bg-white border-b border-stone-200 px-4 py-3">
+        <h1 className="font-semibold text-stone-900">Révision — {data.inspection.address}</h1>
+        <p className="text-sm text-stone-500">
+          Vérifiez les anomalies détectées avant de générer le rapport final.
+        </p>
+      </header>
+
+      <main className="max-w-2xl mx-auto p-4 space-y-6">
+        <section className="bg-white rounded-lg border border-stone-200 p-4">
+          <label className="block text-sm font-medium text-stone-700 mb-2">Synthèse générale</label>
+          <textarea
+            value={synthesis}
+            onChange={(e) => setSynthesis(e.target.value)}
+            rows={6}
+            className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+          />
+        </section>
+
+        {data.photos.map((photo) => (
+          <PhotoReviewCard
+            key={photo.id}
+            photo={photo}
+            onChange={(anomalies, condition) => updatePhotoAnomalies(photo.id, anomalies, condition)}
+          />
+        ))}
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 p-4">
+        <div className="max-w-2xl mx-auto flex gap-2">
+          <button
+            onClick={saveAll}
+            disabled={saving}
+            className="flex-1 rounded border border-stone-300 py-2 font-medium text-stone-700 disabled:opacity-40"
+          >
+            {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+          </button>
+          <button
+            onClick={handleFinalize}
+            className="flex-1 rounded bg-blue-600 text-white py-2 font-medium hover:bg-blue-700"
+          >
+            Finaliser le rapport
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PhotoReviewCard({
+  photo,
+  onChange,
+}: {
+  photo: Photo
+  onChange: (anomalies: Anomaly[], condition: string) => void
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null)
+  const anomalies: Anomaly[] = photo.anomalies ?? []
+  const condition: string = photo.overall_condition ?? 'bon'
+
+  useEffect(() => {
+    let objectUrl: string | null = null
+    api
+      .fetchBlobUrl(`/api/photos/${photo.id}`)
+      .then((url) => {
+        objectUrl = url
+        setImgSrc(url)
+      })
+      .catch(() => {})
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [photo.id])
+
+  function updateAnomaly(index: number, field: keyof Anomaly, value: string) {
+    const next = anomalies.map((a, i) => (i === index ? { ...a, [field]: value } : a))
+    onChange(next, condition)
+  }
+
+  function removeAnomaly(index: number) {
+    onChange(
+      anomalies.filter((_, i) => i !== index),
+      condition
+    )
+  }
+
+  function addAnomaly() {
+    onChange(
+      [...anomalies, { type: 'autre', severity: 'mineure', location: '', description: '', recommendation: '' }],
+      condition
+    )
+  }
+
+  return (
+    <section className="bg-white rounded-lg border border-stone-200 p-4 space-y-3">
+      <div className="flex gap-3">
+        {imgSrc && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imgSrc} alt="" className="w-24 h-24 object-cover rounded flex-shrink-0" />
+        )}
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
+          <select
+            value={condition}
+            onChange={(e) => onChange(anomalies, e.target.value)}
+            className="rounded border border-stone-300 px-2 py-1 text-sm"
+          >
+            <option value="bon">Bon</option>
+            <option value="acceptable">Acceptable</option>
+            <option value="mauvais">Mauvais</option>
+            <option value="critique">Critique</option>
+          </select>
+        </div>
+      </div>
+
+      {anomalies.map((a, i) => (
+        <div key={i} className="border border-stone-100 rounded p-3 space-y-2 bg-stone-50">
+          <div className="flex items-center gap-2">
+            <input
+              value={a.type}
+              onChange={(e) => updateAnomaly(i, 'type', e.target.value)}
+              placeholder="Type (ex: moisissure)"
+              className="flex-1 rounded border border-stone-300 px-2 py-1 text-sm"
+            />
+            <select
+              value={a.severity}
+              onChange={(e) => updateAnomaly(i, 'severity', e.target.value)}
+              className="rounded border border-stone-300 px-2 py-1 text-sm"
+            >
+              {SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => removeAnomaly(i)} className="text-red-500 text-sm px-2">
+              Supprimer
+            </button>
+          </div>
+          <input
+            value={a.location}
+            onChange={(e) => updateAnomaly(i, 'location', e.target.value)}
+            placeholder="Emplacement"
+            className="w-full rounded border border-stone-300 px-2 py-1 text-sm"
+          />
+          <textarea
+            value={a.description}
+            onChange={(e) => updateAnomaly(i, 'description', e.target.value)}
+            placeholder="Description"
+            rows={2}
+            className="w-full rounded border border-stone-300 px-2 py-1 text-sm"
+          />
+          <textarea
+            value={a.recommendation}
+            onChange={(e) => updateAnomaly(i, 'recommendation', e.target.value)}
+            placeholder="Recommandation"
+            rows={2}
+            className="w-full rounded border border-stone-300 px-2 py-1 text-sm"
+          />
+        </div>
+      ))}
+
+      <button onClick={addAnomaly} className="text-sm text-blue-600 font-medium">
+        + Ajouter une anomalie
+      </button>
+    </section>
+  )
+}

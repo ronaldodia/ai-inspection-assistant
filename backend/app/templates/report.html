@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: letter; margin: 2cm; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1c1917; font-size: 11pt; }
+  h1 { font-size: 18pt; margin-bottom: 0.2em; }
+  h2 { font-size: 13pt; margin-top: 1.5em; border-bottom: 1px solid #d6d3d1; padding-bottom: 4px; }
+  .meta { color: #57534e; font-size: 10pt; margin-bottom: 1.5em; }
+  .counts { display: flex; gap: 24px; margin: 1em 0; }
+  .count { text-align: center; }
+  .count .n { font-size: 20pt; font-weight: 700; display: block; }
+  .synthesis { white-space: pre-wrap; line-height: 1.5; }
+  .finding { border: 1px solid #e7e5e4; border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; page-break-inside: avoid; }
+  .finding .sev { font-size: 9pt; font-weight: 700; text-transform: uppercase; }
+  .sev-critique { color: #991b1b; }
+  .sev-majeure { color: #c2410c; }
+  .sev-mineure { color: #a16207; }
+  .finding .type { font-weight: 600; margin: 2px 0 6px; }
+  .finding p { margin: 4px 0; }
+  .footer { margin-top: 2em; font-size: 8pt; color: #a8a29e; }
+</style>
+</head>
+<body>
+  <h1>Rapport d'inspection</h1>
+  <div class="meta">
+    {{ inspection.address }}<br>
+    Type d'inspection : {{ inspection.inspection_type }}<br>
+    Date : {{ inspection.completed_at.strftime('%Y-%m-%d') if inspection.completed_at else '' }}
+  </div>
+
+  <div class="counts">
+    <div class="count"><span class="n" style="color:#991b1b">{{ counts.critique }}</span>Critique</div>
+    <div class="count"><span class="n" style="color:#c2410c">{{ counts.majeure }}</span>Majeure</div>
+    <div class="count"><span class="n" style="color:#a16207">{{ counts.mineure }}</span>Mineure</div>
+  </div>
+
+  <h2>Synthèse</h2>
+  <div class="synthesis">{{ synthesis }}</div>
+
+  <h2>Anomalies détectées ({{ findings|length }})</h2>
+  {% for f in findings %}
+  <div class="finding">
+    <div class="sev sev-{{ f.severity }}">{{ severity_labels.get(f.severity, f.severity) }}</div>
+    <div class="type">{{ f.type }} — {{ f.location }}</div>
+    <p>{{ f.description }}</p>
+    <p><strong>Recommandation :</strong> {{ f.recommendation }}</p>
+  </div>
+  {% else %}
+  <p>Aucune anomalie détectée.</p>
+  {% endfor %}
+
+  <div class="footer">
+    Rapport généré avec l'assistance d'intelligence artificielle (Claude, Anthropic) et
+    validé par l'inspecteur avant remise au client. Document à des fins d'inspection
+    préachat — ne remplace pas une expertise structurale complète en cas de doute.
+  </div>
+</body>
+</html>

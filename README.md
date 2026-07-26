@@ -1,0 +1,1 @@
+# ai-inspection-assistant

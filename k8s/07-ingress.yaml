@@ -1,0 +1,39 @@
+# Remplacer inspect.example.com / api.inspect.example.com par vos vrais domaines
+# avant d'appliquer. NEXT_PUBLIC_API_URL est figé au build du frontend (voir readme
+# "Déploiement") — il doit correspondre au host api.* utilisé ici.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inspect-ia
+  namespace: inspect-ia
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: public
+  tls:
+    - hosts:
+        - inspect.example.com
+        - api.inspect.example.com
+      secretName: inspect-ia-tls
+  rules:
+    - host: inspect.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+    - host: api.inspect.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
