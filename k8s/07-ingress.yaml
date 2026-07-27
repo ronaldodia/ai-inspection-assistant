@@ -1,5 +1,5 @@
 # NEXT_PUBLIC_API_URL est figé au build du frontend (voir readme "Déploiement") — il
-# doit correspondre au host api.* utilisé ici (https://api.inspection.evoluops.com).
+# doit correspondre au host api.* utilisé ici (https://api.inspect.evoluops.com).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -12,11 +12,11 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - inspection.evoluops.com
-        - api.inspection.evoluops.com
+        - inspect.evoluops.com
+        - api.inspect.evoluops.com
       secretName: inspect-ia-tls
   rules:
-    - host: inspection.evoluops.com
+    - host: inspect.evoluops.com
       http:
         paths:
           - path: /
@@ -26,7 +26,7 @@ spec:
                 name: frontend
                 port:
                   number: 3000
-    - host: api.inspection.evoluops.com
+    - host: api.inspect.evoluops.com
       http:
         paths:
           - path: /

@@ -361,7 +361,7 @@ Le contrôleur ingress (classe `nginx`) et le `ClusterIssuer` cert-manager
 `cert-manager` de microk8s ne sont à activer ici, et ce dépôt ne gère pas ces ressources
 (pas de manifest `ClusterIssuer` dans `k8s/`, l'ingress y référence juste
 `letsencrypt-prod` par son nom). Les manifests utilisent `ingressClassName: nginx` avec
-les hosts `inspection.evoluops.com` (frontend) et `api.inspection.evoluops.com`
+les hosts `inspect.evoluops.com` (frontend) et `api.inspect.evoluops.com`
 (backend) — un enregistrement DNS wildcard `*.evoluops.com` doit pointer vers l'IP du
 contrôleur.
 
@@ -383,9 +383,9 @@ ce commit et synchronise le cluster — plus besoin de `docker build`/`push`/`ku
 manuel pour déployer une nouvelle version.
 
 À configurer une fois dans les paramètres du dépôt GitHub :
-- **Settings > Secrets and variables > Actions > Variables** : `NEXT_PUBLIC_API_URL` =
-  `https://api.inspection.evoluops.com`, sinon la valeur par défaut du workflow
-  (`https://api.inspect.example.com`, incorrecte pour ce déploiement) est utilisée.
+- **Settings > Secrets and variables > Actions > Variables** (optionnel) :
+  `NEXT_PUBLIC_API_URL` — le workflow utilise déjà `https://api.inspect.evoluops.com`
+  par défaut si cette variable n'est pas définie ; ne la définir que si ce host change.
 - Si les packages `ghcr.io/ronaldodia/ai-inspection-assistant-*` restent privés, créer le
   secret `ghcr-pull-secret` dans le cluster — voir
   [`k8s/01b-ghcr-pull-secret.example.yaml`](k8s/01b-ghcr-pull-secret.example.yaml).
