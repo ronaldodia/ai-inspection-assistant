@@ -375,8 +375,12 @@ Le workflow [`build-and-push.yaml`](.github/workflows/build-and-push.yaml) const
 publie `ghcr.io/ronaldodia/ai-inspection-assistant-{backend,frontend}` à chaque push sur
 `main`, tag les images avec le hash de commit (`sha-xxxxxxx`), puis commit lui-même la
 mise à jour des tags dans `k8s/04-backend.yaml`, `k8s/05-worker.yaml` et
-`k8s/06-frontend.yaml`. ArgoCD détecte ce commit et synchronise le cluster — plus besoin
-de `docker build`/`push`/`kubectl apply` manuel pour déployer une nouvelle version.
+`k8s/06-frontend.yaml`, ainsi que la régénération de
+[`k8s/01c-postgres-init-configmap.yaml`](k8s/01c-postgres-init-configmap.yaml) depuis
+`backend/schema.sql` (ce fichier ne doit jamais être édité à la main — toute évolution du
+schéma passe par `backend/schema.sql`, la ConfigMap suit automatiquement). ArgoCD détecte
+ce commit et synchronise le cluster — plus besoin de `docker build`/`push`/`kubectl apply`
+manuel pour déployer une nouvelle version.
 
 À configurer une fois dans les paramètres du dépôt GitHub :
 - **Settings > Secrets and variables > Actions > Variables** : `NEXT_PUBLIC_API_URL` =
@@ -391,9 +395,7 @@ de `docker build`/`push`/`kubectl apply` manuel pour déployer une nouvelle vers
 
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
-
-kubectl create configmap postgres-init \
-  --from-file=schema.sql=backend/schema.sql -n inspect-ia
+kubectl apply -f k8s/01c-postgres-init-configmap.yaml
 
 cp k8s/01-secrets.example.yaml k8s/01-secrets.yaml
 # éditer k8s/01-secrets.yaml avec des vraies valeurs (ne jamais commit ce fichier)

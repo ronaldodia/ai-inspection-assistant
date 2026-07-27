@@ -18,7 +18,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8000/health)",
       "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"inspecteur@local.test\",\"password\":\"inspecteur123\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")",
       "Bash(python3 -c ' *)",
-      "Bash(grep -n \"Déploiement \\(microk8s\\)\\\\|Prérequis\\\\|Build & push\\\\|Déploiement$\\\\|Créer le premier compte\" /home/edia/Desktop/codes/inspection-assiste/readme.md)"
+      "Bash(grep -n \"Déploiement \\(microk8s\\)\\\\|Prérequis\\\\|Build & push\\\\|Déploiement$\\\\|Créer le premier compte\" /home/edia/Desktop/codes/inspection-assiste/readme.md)",
+      "Bash(kubectl create *)"
     ]
   }
 }

@@ -135,6 +135,17 @@ jobs:
           BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
           FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
 
+      - name: Regenerate postgres-init ConfigMap from schema.sql
+        run: |
+          set -euo pipefail
+          {
+            echo "# Généré automatiquement par le workflow CI depuis backend/schema.sql — ne pas éditer à la main."
+            kubectl create configmap postgres-init \
+              --from-file=schema.sql=backend/schema.sql \
+              --namespace inspect-ia \
+              --dry-run=client -o yaml
+          } > k8s/01c-postgres-init-configmap.yaml
+
       - name: Commit and push updated manifests
         run: |
           set -euo pipefail
@@ -144,6 +155,6 @@ jobs:
             echo "No manifest changes, skipping commit."
             exit 0
           fi
-          git add k8s/04-backend.yaml k8s/05-worker.yaml k8s/06-frontend.yaml
+          git add k8s/04-backend.yaml k8s/05-worker.yaml k8s/06-frontend.yaml k8s/01c-postgres-init-configmap.yaml
           git commit -m "chore(k8s): deploy ${{ needs.build-backend.outputs.tag }}"
           git push
