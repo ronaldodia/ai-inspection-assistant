@@ -18,7 +18,7 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Token invalide")
 
     row = conn.execute(
-        "SELECT id, email, full_name FROM users WHERE id = %s", (user_id,)
+        "SELECT id, email, full_name, certification FROM users WHERE id = %s", (user_id,)
     ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Utilisateur introuvable")

@@ -35,7 +35,9 @@ def _photo_data_uri(storage_path: str) -> str | None:
     return f"data:image/jpeg;base64,{b64}"
 
 
-def generate_report_pdf(inspection: dict, photos: list[dict], synthesis: str) -> str:
+def generate_report_pdf(
+    inspection: dict, photos: list[dict], synthesis: str, report_number: str, inspector: dict
+) -> str:
     template = _env.get_template("report.html")
 
     counts = {"critique": 0, "majeure": 0, "mineure": 0}
@@ -68,6 +70,8 @@ def generate_report_pdf(inspection: dict, photos: list[dict], synthesis: str) ->
         counts=counts,
         findings_count=findings_count,
         severity_labels=SEVERITY_LABELS,
+        report_number=report_number,
+        inspector=inspector,
     )
 
     os.makedirs(settings.reports_dir, exist_ok=True)

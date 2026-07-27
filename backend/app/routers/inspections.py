@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime, timezone
 
 import psycopg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -75,7 +76,7 @@ def get_inspection(
         (inspection_id,),
     ).fetchall()
     report = conn.execute(
-        "SELECT synthesis, pdf_path, generated_at FROM reports WHERE inspection_id = %s",
+        "SELECT synthesis, pdf_path, report_number, generated_at FROM reports WHERE inspection_id = %s",
         (inspection_id,),
     ).fetchone()
     return {"inspection": inspection, "photos": photos, "report": report}
@@ -224,23 +225,34 @@ def finalize_inspection(
         (inspection_id,),
     ).fetchall()
     report = conn.execute(
-        "SELECT synthesis FROM reports WHERE inspection_id = %s", (inspection_id,)
+        "SELECT synthesis, report_number FROM reports WHERE inspection_id = %s", (inspection_id,)
     ).fetchone()
 
+    report_number = report["report_number"] if report else None
+    if not report_number:
+        seq = conn.execute("SELECT nextval('report_number_seq') AS n").fetchone()
+        report_number = f"RAP-{datetime.now(timezone.utc):%Y}-{seq['n']:05d}"
+
+    completed_at = datetime.now(timezone.utc)
+    inspection_data = {**dict(inspection), "completed_at": completed_at}
+
     pdf_filename = generate_report_pdf(
-        dict(inspection), photos, report["synthesis"] if report else ""
+        inspection_data, photos, report["synthesis"] if report else "", report_number, user
     )
 
     conn.execute(
-        "UPDATE reports SET pdf_path = %s, generated_at = now() WHERE inspection_id = %s",
-        (pdf_filename, inspection_id),
+        """
+        UPDATE reports SET pdf_path = %s, report_number = %s, generated_at = now()
+        WHERE inspection_id = %s
+        """,
+        (pdf_filename, report_number, inspection_id),
     )
     conn.execute(
-        "UPDATE inspections SET status = 'COMPLETED', completed_at = now() WHERE id = %s",
-        (inspection_id,),
+        "UPDATE inspections SET status = 'COMPLETED', completed_at = %s WHERE id = %s",
+        (completed_at, inspection_id),
     )
     conn.commit()
-    return {"status": "COMPLETED"}
+    return {"status": "COMPLETED", "report_number": report_number}
 
 
 @router.get("/{inspection_id}/report.pdf")

@@ -28,7 +28,9 @@
   <h1>Rapport d'inspection</h1>
   <div class="meta">
     {{ inspection.address }}<br>
-    Date : {{ inspection.completed_at.strftime('%Y-%m-%d') if inspection.completed_at else '' }}
+    Date : {{ inspection.completed_at.strftime('%Y-%m-%d') if inspection.completed_at else '' }}<br>
+    N° de rapport : {{ report_number }}<br>
+    Inspecteur : {{ inspector.full_name }}{% if inspector.certification %} — Certification : {{ inspector.certification }}{% endif %}
   </div>
 
   <div class="counts">

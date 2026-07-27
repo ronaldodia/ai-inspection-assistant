@@ -34,3 +34,8 @@ class UpdateAnomaliesRequest(BaseModel):
 
 class UpdateSynthesisRequest(BaseModel):
     synthesis: str
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str
+    certification: str | None = None

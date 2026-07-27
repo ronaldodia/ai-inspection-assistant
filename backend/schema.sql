@@ -5,6 +5,7 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
+    certification VARCHAR(100),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -49,9 +50,12 @@ CREATE TABLE anomaly_detections (
     reviewed BOOLEAN NOT NULL DEFAULT false
 );
 
+CREATE SEQUENCE report_number_seq START 1;
+
 CREATE TABLE reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     inspection_id UUID NOT NULL UNIQUE REFERENCES inspections(id) ON DELETE CASCADE,
+    report_number VARCHAR(50) UNIQUE,
     pdf_path VARCHAR(500),
     synthesis TEXT,
     generated_at TIMESTAMPTZ NOT NULL DEFAULT now()

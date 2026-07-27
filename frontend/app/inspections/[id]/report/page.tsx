@@ -12,7 +12,7 @@ interface Anomaly {
 interface InspectionDetail {
   inspection: { address: string; completed_at: string | null }
   photos: { anomalies: Anomaly[] | null }[]
-  report: { synthesis: string | null } | null
+  report: { synthesis: string | null; report_number: string | null } | null
 }
 
 export default function ReportPage() {
@@ -65,6 +65,9 @@ export default function ReportPage() {
             <p className="text-sm text-stone-500">
               {new Date(data.inspection.completed_at).toLocaleDateString('fr-CA')}
             </p>
+          )}
+          {data.report?.report_number && (
+            <p className="text-sm text-stone-500">N° de rapport : {data.report.report_number}</p>
           )}
         </div>
 

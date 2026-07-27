@@ -65,9 +65,14 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-stone-50">
       <header className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between">
         <h1 className="font-semibold text-stone-900">Inspect IA</h1>
-        <button onClick={logout} className="text-sm text-stone-500 hover:text-stone-700">
-          Déconnexion
-        </button>
+        <div className="flex items-center gap-4">
+          <Link href="/profile" className="text-sm text-stone-500 hover:text-stone-700">
+            Mon profil
+          </Link>
+          <button onClick={logout} className="text-sm text-stone-500 hover:text-stone-700">
+            Déconnexion
+          </button>
+        </div>
       </header>
       <main className="max-w-2xl mx-auto p-4 space-y-4">
         <Link

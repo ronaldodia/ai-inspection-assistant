@@ -66,5 +66,10 @@ export const api = {
 
   finalize: (id: string) => request(`/api/inspections/${id}/finalize`, { method: 'POST' }).then((r) => r.json()),
 
+  getProfile: () => request('/api/auth/me').then((r) => r.json()),
+
+  updateProfile: (data: { full_name: string; certification: string | null }) =>
+    request('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }).then((r) => r.json()),
+
   fetchBlobUrl,
 }
