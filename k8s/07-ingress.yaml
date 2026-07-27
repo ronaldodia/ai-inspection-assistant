@@ -1,6 +1,5 @@
-# Remplacer inspect.example.com / api.inspect.example.com par vos vrais domaines
-# avant d'appliquer. NEXT_PUBLIC_API_URL est figé au build du frontend (voir readme
-# "Déploiement") — il doit correspondre au host api.* utilisé ici.
+# NEXT_PUBLIC_API_URL est figé au build du frontend (voir readme "Déploiement") — il
+# doit correspondre au host api.* utilisé ici (https://api.inspection.evoluops.com).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -10,14 +9,14 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 spec:
-  ingressClassName: public
+  ingressClassName: nginx
   tls:
     - hosts:
-        - inspect.example.com
-        - api.inspect.example.com
+        - inspection.evoluops.com
+        - api.inspection.evoluops.com
       secretName: inspect-ia-tls
   rules:
-    - host: inspect.example.com
+    - host: inspection.evoluops.com
       http:
         paths:
           - path: /
@@ -27,7 +26,7 @@ spec:
                 name: frontend
                 port:
                   number: 3000
-    - host: api.inspect.example.com
+    - host: api.inspection.evoluops.com
       http:
         paths:
           - path: /

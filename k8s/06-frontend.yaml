@@ -13,9 +13,11 @@ spec:
       labels:
         app: frontend
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: frontend
-          image: localhost:32000/inspect-ia-frontend:latest
+          image: ghcr.io/ronaldodia/ai-inspection-assistant-frontend:latest
           ports:
             - containerPort: 3000
           resources:

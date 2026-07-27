@@ -13,9 +13,11 @@ spec:
       labels:
         app: backend
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: backend
-          image: localhost:32000/inspect-ia-backend:latest
+          image: ghcr.io/ronaldodia/ai-inspection-assistant-backend:latest
           ports:
             - containerPort: 8000
           envFrom:
@@ -27,7 +29,7 @@ spec:
             - name: REPORTS_DIR
               value: /data/reports
             - name: CORS_ORIGINS
-              value: '["https://inspect.example.com"]'
+              value: '["https://inspection.evoluops.com"]'
           volumeMounts:
             - name: data
               mountPath: /data

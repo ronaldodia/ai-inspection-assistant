@@ -351,23 +351,43 @@ Les écrans principaux (login, dashboard, nouvelle inspection, capture) restent 
 ### Prérequis (une fois)
 
 ```bash
-microk8s enable dns hostpath-storage ingress cert-manager registry
-kubectl get ingressclass   # confirmer le nom (généralement "public")
+microk8s enable dns hostpath-storage
+kubectl get ingressclass          # doit lister "nginx" (contrôleur déjà en place)
+kubectl get clusterissuer         # doit lister "letsencrypt-prod" (déjà en place)
 ```
 
-### Build & push des images vers le registre local microk8s
+Le contrôleur ingress (classe `nginx`) et le `ClusterIssuer` cert-manager
+(`letsencrypt-prod`) sont déjà déployés sur le cluster — ni l'addon `ingress` ni l'addon
+`cert-manager` de microk8s ne sont à activer ici, et ce dépôt ne gère pas ces ressources
+(pas de manifest `ClusterIssuer` dans `k8s/`, l'ingress y référence juste
+`letsencrypt-prod` par son nom). Les manifests utilisent `ingressClassName: nginx` avec
+les hosts `inspection.evoluops.com` (frontend) et `api.inspection.evoluops.com`
+(backend) — un enregistrement DNS wildcard `*.evoluops.com` doit pointer vers l'IP du
+contrôleur.
 
-```bash
-docker build -t localhost:32000/inspect-ia-backend:latest ./backend
-docker push localhost:32000/inspect-ia-backend:latest
+ArgoCD doit être installé et configuré pour surveiller le dossier `k8s/` de ce dépôt
+(sync automatique). Le registre local microk8s n'est plus utilisé — les images sont
+construites et publiées sur GitHub Container Registry (voir plus bas).
 
-docker build -t localhost:32000/inspect-ia-frontend:latest \
-  --build-arg NEXT_PUBLIC_API_URL=https://api.inspect.example.com \
-  ./frontend
-docker push localhost:32000/inspect-ia-frontend:latest
-```
+### CI/CD (GitHub Actions + ArgoCD)
 
-### Déploiement
+Le workflow [`build-and-push.yaml`](.github/workflows/build-and-push.yaml) construit et
+publie `ghcr.io/ronaldodia/ai-inspection-assistant-{backend,frontend}` à chaque push sur
+`main`, tag les images avec le hash de commit (`sha-xxxxxxx`), puis commit lui-même la
+mise à jour des tags dans `k8s/04-backend.yaml`, `k8s/05-worker.yaml` et
+`k8s/06-frontend.yaml`. ArgoCD détecte ce commit et synchronise le cluster — plus besoin
+de `docker build`/`push`/`kubectl apply` manuel pour déployer une nouvelle version.
+
+À configurer une fois dans les paramètres du dépôt GitHub :
+- **Settings > Secrets and variables > Actions > Variables** : `NEXT_PUBLIC_API_URL` =
+  `https://api.inspection.evoluops.com`, sinon la valeur par défaut du workflow
+  (`https://api.inspect.example.com`, incorrecte pour ce déploiement) est utilisée.
+- Si les packages `ghcr.io/ronaldodia/ai-inspection-assistant-*` restent privés, créer le
+  secret `ghcr-pull-secret` dans le cluster — voir
+  [`k8s/01b-ghcr-pull-secret.example.yaml`](k8s/01b-ghcr-pull-secret.example.yaml).
+  Sinon, les rendre publics et retirer `imagePullSecrets` des manifests 04/05/06.
+
+### Déploiement initial (une fois, avant qu'ArgoCD ne prenne le relais)
 
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
@@ -379,14 +399,20 @@ cp k8s/01-secrets.example.yaml k8s/01-secrets.yaml
 # éditer k8s/01-secrets.yaml avec des vraies valeurs (ne jamais commit ce fichier)
 kubectl apply -f k8s/01-secrets.yaml
 
+# uniquement si les packages GHCR restent privés — voir k8s/01b-ghcr-pull-secret.example.yaml
+kubectl create secret docker-registry ghcr-pull-secret \
+  --docker-server=ghcr.io --docker-username=<user> --docker-password=<PAT> -n inspect-ia
+
 kubectl apply -f k8s/02-postgres.yaml
 kubectl apply -f k8s/03-photos-pvc.yaml
 kubectl apply -f k8s/04-backend.yaml
 kubectl apply -f k8s/05-worker.yaml
 kubectl apply -f k8s/06-frontend.yaml
-kubectl apply -f k8s/08-cluster-issuer.yaml
 kubectl apply -f k8s/07-ingress.yaml
 ```
+
+Une fois cette première application faite et ArgoCD pointé sur `k8s/`, les déploiements
+suivants se font simplement en poussant sur `main` — le CI/CD s'occupe du reste.
 
 ### Créer le premier compte inspecteur
 
