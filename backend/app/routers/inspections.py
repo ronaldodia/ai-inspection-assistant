@@ -1,17 +1,15 @@
-import os
 import uuid
 from datetime import datetime, timezone
 
 import psycopg
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from psycopg.types.json import Json
 
-from app.config import settings
 from app.db import get_conn
 from app.deps import get_current_user, get_owned_inspection
 from app.pdf import generate_report_pdf
 from app.schemas import CreateInspectionRequest, UpdateAnomaliesRequest, UpdateSynthesisRequest
+from app.storage import storage
 
 router = APIRouter(prefix="/api/inspections", tags=["inspections"])
 
@@ -116,10 +114,7 @@ def upload_photo(
 
     photo_id = str(uuid.uuid4())
     rel_path = f"{inspection_id}/{photo_id}.{ext}"
-    abs_path = os.path.join(settings.photos_dir, rel_path)
-    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-    with open(abs_path, "wb") as f:
-        f.write(contents)
+    storage.write("photos", rel_path, contents)
 
     row = conn.execute(
         """
@@ -216,7 +211,7 @@ def finalize_inspection(
 
     photos = conn.execute(
         """
-        SELECT p.id, p.photo_order, p.section_type, p.storage_path, a.anomalies
+        SELECT p.id, p.photo_order, p.section_type, p.storage_path, a.anomalies, a.overall_condition
         FROM photos p
         JOIN anomaly_detections a ON a.photo_id = p.id
         WHERE p.inspection_id = %s
@@ -268,7 +263,11 @@ def download_report(
     if not report or not report["pdf_path"]:
         raise HTTPException(status_code=404, detail="Rapport non disponible")
 
-    abs_path = os.path.join(settings.reports_dir, report["pdf_path"])
-    if not os.path.isfile(abs_path):
+    data = storage.read("reports", report["pdf_path"])
+    if data is None:
         raise HTTPException(status_code=404, detail="Fichier introuvable")
-    return FileResponse(abs_path, media_type="application/pdf", filename=f"rapport-{inspection_id}.pdf")
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="rapport-{inspection_id}.pdf"'},
+    )

@@ -14,6 +14,8 @@
 7. [Frontend Wireframes](#frontend-wireframes)
 8. [Déploiement (microk8s)](#déploiement-microk8s)
 9. [Timeline Développement](#timeline-développement)
+10. [Feuille de route post-MVP](ROADMAP.md) — invitations, abonnement, métriques
+11. [Déploiement Azure App Service](infra/README.md) — environnement séparé, Storage Account + Postgres managé
 
 ---
 

@@ -14,6 +14,14 @@ moisissure, infiltration d'eau, isolant endommagé ou manquant, fissures structu
 signes de nuisibles (vermine, insectes), défauts de ventilation, ou tout autre problème \
 pertinent pour un rapport d'inspection.
 
+Une anomalie = un défaut physique distinct. Si plusieurs indices (ex: coloration, \
+isolant déplacé, absence de ventilation) décrivent la même cause ou la même zone \
+affectée, regroupe-les en une seule anomalie plutôt que d'en créer une par angle ou \
+par catégorie — choisis le type le plus pertinent et mentionne les aspects connexes \
+dans la description. Ne répète jamais la même observation sous plusieurs types. Une \
+photo qui montre un seul problème doit retourner une seule anomalie, pas plusieurs \
+variations du même constat.
+
 Pour chaque anomalie détectée :
 - type : catégorie courte (ex: "moisissure", "infiltration_eau", "isolant_endommage", \
 "fissure", "nuisibles", "ventilation", "autre")

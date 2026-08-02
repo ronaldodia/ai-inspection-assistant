@@ -1,12 +1,11 @@
-import os
+import mimetypes
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.config import settings
 from app.db import get_conn
 from app.deps import get_current_user
+from app.storage import storage
 
 router = APIRouter(prefix="/api/photos", tags=["photos"])
 
@@ -29,7 +28,8 @@ def get_photo(
     if not row:
         raise HTTPException(status_code=404, detail="Photo introuvable")
 
-    abs_path = os.path.join(settings.photos_dir, row["storage_path"])
-    if not os.path.isfile(abs_path):
+    data = storage.read("photos", row["storage_path"])
+    if data is None:
         raise HTTPException(status_code=404, detail="Fichier introuvable")
-    return FileResponse(abs_path)
+    media_type, _ = mimetypes.guess_type(row["storage_path"])
+    return Response(content=data, media_type=media_type or "application/octet-stream")

@@ -13,5 +13,10 @@ class Settings(BaseSettings):
     reports_dir: str = "/data/reports"
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    storage_backend: str = "local"  # "local" ou "azure"
+    azure_storage_connection_string: str | None = None
+    azure_photos_container: str = "photos"
+    azure_reports_container: str = "reports"
+
 
 settings = Settings()
