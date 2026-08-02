@@ -19,7 +19,15 @@
       "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"inspecteur@local.test\",\"password\":\"inspecteur123\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")",
       "Bash(python3 -c ' *)",
       "Bash(grep -n \"Déploiement \\(microk8s\\)\\\\|Prérequis\\\\|Build & push\\\\|Déploiement$\\\\|Créer le premier compte\" /home/edia/Desktop/codes/inspection-assiste/readme.md)",
-      "Bash(kubectl create *)"
+      "Bash(kubectl create *)",
+      "Bash(pdfinfo \"Rapport d'inspection 2980 Rue Albert-Lachance, Lévis.pdf\")",
+      "Bash(python3 -m venv /tmp/test-venv)",
+      "Bash(/tmp/test-venv/bin/pip install *)",
+      "Bash(python3 -m pip --version)",
+      "Bash(apt list *)",
+      "Bash(ldconfig -p)",
+      "Bash(apt-cache policy *)",
+      "WebSearch"
     ]
   }
 }
