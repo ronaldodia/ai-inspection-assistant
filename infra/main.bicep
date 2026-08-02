@@ -201,5 +201,8 @@ resource frontendApp 'Microsoft.Web/sites@2023-01-01' = {
 // déjà fourni en paramètre — voir infra/README.md.
 output backendUrl string = backendUrl
 output frontendUrl string = frontendUrl
+output backendAppName string = backendApp.name
+output workerAppName string = workerApp.name
+output frontendAppName string = frontendApp.name
 output postgresServerName string = postgres.name
 output storageAccountName string = storageAccount.name

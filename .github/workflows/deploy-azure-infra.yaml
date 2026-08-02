@@ -1,0 +1,83 @@
+name: Deploy Azure Infrastructure
+
+# Déclenchement manuel uniquement — provisionner/mettre à jour des ressources
+# facturées (App Service Plan, Postgres, Storage) ne doit jamais arriver
+# automatiquement sur un simple push. Ne construit aucune image : réutilise
+# celles déjà publiées par le workflow "Build & Push Docker Images"
+# (ghcr.io/<repo>-backend et -frontend-azure).
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag déjà publié par le pipeline de build à déployer (ex: sha-abc1234, ou "latest")'
+        required: false
+        default: 'latest'
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Vérifier les prérequis
+        run: |
+          if [ -z "${{ vars.AZURE_RESOURCE_GROUP }}" ]; then
+            echo "::error::vars.AZURE_RESOURCE_GROUP n'est pas défini (Settings > Secrets and variables > Actions > Variables) — voir infra/README.md."
+            exit 1
+          fi
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Déployer l'infrastructure (Bicep)
+        id: deploy
+        run: |
+          set -euo pipefail
+          OUTPUT=$(az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              postgresAdminPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+              secretKey="${{ secrets.BACKEND_SECRET_KEY }}" \
+              anthropicApiKey="${{ secrets.ANTHROPIC_API_KEY }}" \
+              registryUsername="${{ secrets.GHCR_PULL_USERNAME }}" \
+              registryPassword="${{ secrets.GHCR_PULL_TOKEN }}" \
+              backendImage="ghcr.io/${{ github.repository }}-backend:${{ inputs.image_tag }}" \
+              frontendImage="ghcr.io/${{ github.repository }}-frontend-azure:${{ inputs.image_tag }}" \
+            --query properties.outputs -o json)
+          # az -o json est indenté sur plusieurs lignes — le compacter avant de
+          # l'écrire dans GITHUB_OUTPUT, qui exige une valeur sur une seule ligne.
+          echo "outputs=$(echo "$OUTPUT" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)))')" >> "$GITHUB_OUTPUT"
+
+      - name: Enregistrer les variables du dépôt pour le déploiement continu
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_OUTPUTS: ${{ steps.deploy.outputs.outputs }}
+        run: |
+          set -euo pipefail
+          BACKEND_APP=$(python3 -c "import json,os; print(json.loads(os.environ['DEPLOY_OUTPUTS'])['backendAppName']['value'])")
+          WORKER_APP=$(python3 -c "import json,os; print(json.loads(os.environ['DEPLOY_OUTPUTS'])['workerAppName']['value'])")
+          FRONTEND_APP=$(python3 -c "import json,os; print(json.loads(os.environ['DEPLOY_OUTPUTS'])['frontendAppName']['value'])")
+          BACKEND_URL=$(python3 -c "import json,os; print(json.loads(os.environ['DEPLOY_OUTPUTS'])['backendUrl']['value'])")
+          FRONTEND_URL=$(python3 -c "import json,os; print(json.loads(os.environ['DEPLOY_OUTPUTS'])['frontendUrl']['value'])")
+
+          gh variable set AZURE_BACKEND_APP_NAME --body "$BACKEND_APP"
+          gh variable set AZURE_WORKER_APP_NAME --body "$WORKER_APP"
+          gh variable set AZURE_FRONTEND_APP_NAME --body "$FRONTEND_APP"
+          gh variable set AZURE_NEXT_PUBLIC_API_URL --body "$BACKEND_URL"
+
+          echo "Backend  -> $BACKEND_URL"
+          echo "Frontend -> $FRONTEND_URL"
+          echo ""
+          echo "Variables du dépôt mises à jour — le job deploy-azure du pipeline"
+          echo "'Build & Push Docker Images' peut maintenant déployer automatiquement"
+          echo "à chaque push sur main."

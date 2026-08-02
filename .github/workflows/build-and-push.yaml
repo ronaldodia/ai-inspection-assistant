@@ -89,7 +89,9 @@ jobs:
         with:
           context: ./backend
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.BACKEND_IMAGE }}:${{ steps.vars.outputs.tag }}
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.vars.outputs.tag }}
+            ${{ env.BACKEND_IMAGE }}:latest
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -186,7 +188,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.AZURE_NEXT_PUBLIC_API_URL }}
-          tags: ${{ env.FRONTEND_AZURE_IMAGE }}:${{ steps.vars.outputs.tag }}
+          tags: |
+            ${{ env.FRONTEND_AZURE_IMAGE }}:${{ steps.vars.outputs.tag }}
+            ${{ env.FRONTEND_AZURE_IMAGE }}:latest
           cache-from: type=gha,scope=frontend-azure
           cache-to: type=gha,mode=max,scope=frontend-azure
 
