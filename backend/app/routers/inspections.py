@@ -7,6 +7,7 @@ from psycopg.types.json import Json
 
 from app.db import get_conn
 from app.deps import get_current_user, get_owned_inspection
+from app.limits import effective_inspection_limit, effective_photo_limit
 from app.pdf import generate_report_pdf
 from app.schemas import CreateInspectionRequest, UpdateAnomaliesRequest, UpdateSynthesisRequest
 from app.storage import storage
@@ -27,6 +28,13 @@ def create_inspection(
     user=Depends(get_current_user),
     conn: psycopg.Connection = Depends(get_conn),
 ):
+    count = conn.execute(
+        "SELECT count(*) AS c FROM inspections WHERE user_id = %s AND archived_at IS NULL",
+        (user["id"],),
+    ).fetchone()
+    if count["c"] >= effective_inspection_limit(user):
+        raise HTTPException(status_code=403, detail="Limite d'inspections atteinte pour ce compte")
+
     row = conn.execute(
         """
         INSERT INTO inspections (user_id, address, inspection_type, notes, lat, lon)
@@ -103,6 +111,12 @@ def upload_photo(
     ).fetchone()
     if existing:
         return {"id": str(existing["id"]), "duplicate": True}
+
+    photo_count = conn.execute(
+        "SELECT count(*) AS c FROM photos WHERE inspection_id = %s", (inspection_id,)
+    ).fetchone()
+    if photo_count["c"] >= effective_photo_limit(user):
+        raise HTTPException(status_code=403, detail="Limite de photos atteinte pour cette inspection")
 
     ext = ALLOWED_CONTENT_TYPES.get(file.content_type)
     if ext is None:

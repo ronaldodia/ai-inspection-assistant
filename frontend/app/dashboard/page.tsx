@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const logout = useAuthStore((s) => s.logout)
   const [inspections, setInspections] = useState<InspectionSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -57,6 +58,7 @@ export default function DashboardPage() {
       .listInspections()
       .then(setInspections)
       .finally(() => setLoading(false))
+    api.getProfile().then((p) => setIsAdmin(p.role === 'admin'))
   }, [token])
 
   if (!token) return null
@@ -66,6 +68,11 @@ export default function DashboardPage() {
       <header className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between">
         <h1 className="font-semibold text-stone-900">Inspect IA</h1>
         <div className="flex items-center gap-4">
+          {isAdmin && (
+            <Link href="/admin" className="text-sm text-stone-500 hover:text-stone-700">
+              Administration
+            </Link>
+          )}
           <Link href="/profile" className="text-sm text-stone-500 hover:text-stone-700">
             Mon profil
           </Link>

@@ -12,10 +12,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest, conn: psycopg.Connection = Depends(get_conn)):
     row = conn.execute(
-        "SELECT id, password_hash FROM users WHERE email = %s", (data.email,)
+        "SELECT id, password_hash, is_active FROM users WHERE email = %s", (data.email,)
     ).fetchone()
     if not row or not verify_password(data.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Identifiants invalides")
+    if not row["is_active"]:
+        raise HTTPException(status_code=403, detail="Compte désactivé")
     token = create_access_token(str(row["id"]))
     return TokenResponse(access_token=token, token_type="bearer")
 

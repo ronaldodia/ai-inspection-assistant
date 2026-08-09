@@ -39,12 +39,19 @@ echo "→ Compte de test (créé si absent) : ${DEV_EMAIL} / ${DEV_PASSWORD}"
 docker compose exec -T backend python -m scripts.create_user \
   --email "$DEV_EMAIL" --password "$DEV_PASSWORD" --full-name "Inspecteur Test" || true
 
+ADMIN_EMAIL="admin@local.test"
+ADMIN_PASSWORD="admin12345"
+echo "→ Compte admin (créé si absent) : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}"
+docker compose exec -T backend python -m scripts.create_user \
+  --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" --full-name "Admin Test" --role admin || true
+
 cat <<EOF
 
 ✅ Prêt :
    Frontend : http://localhost:3000
    Backend  : http://localhost:8000/health
    Compte de test : ${DEV_EMAIL} / ${DEV_PASSWORD}
+   Compte admin   : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}
 
 Logs  : docker compose logs -f [service]
 Arrêt : docker compose down

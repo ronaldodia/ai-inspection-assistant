@@ -18,5 +18,10 @@ class Settings(BaseSettings):
     azure_photos_container: str = "photos"
     azure_reports_container: str = "reports"
 
+    # Limites par défaut appliquées aux inspecteurs sans limite personnalisée
+    # (users.max_inspections / users.max_photos_per_inspection = NULL).
+    default_max_inspections: int = 100
+    default_max_photos_per_inspection: int = 50
+
 
 settings = Settings()

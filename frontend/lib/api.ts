@@ -71,5 +71,23 @@ export const api = {
   updateProfile: (data: { full_name: string; certification: string | null }) =>
     request('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }).then((r) => r.json()),
 
+  listInspectors: () => request('/api/admin/inspectors').then((r) => r.json()),
+
+  createInspector: (data: Record<string, unknown>) =>
+    request('/api/admin/inspectors', { method: 'POST', body: JSON.stringify(data) }).then((r) => r.json()),
+
+  updateInspector: (id: string, data: Record<string, unknown>) =>
+    request(`/api/admin/inspectors/${id}`, { method: 'PATCH', body: JSON.stringify(data) }).then((r) =>
+      r.json()
+    ),
+
+  resetInspectorPassword: (id: string, password: string) =>
+    request(`/api/admin/inspectors/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }).then((r) => r.json()),
+
+  getAdminStats: () => request('/api/admin/stats').then((r) => r.json()),
+
   fetchBlobUrl,
 }

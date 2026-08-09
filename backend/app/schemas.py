@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
@@ -39,3 +39,24 @@ class UpdateSynthesisRequest(BaseModel):
 class UpdateProfileRequest(BaseModel):
     full_name: str
     certification: str | None = None
+
+
+class CreateInspectorRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+    full_name: str
+    certification: str | None = None
+    max_inspections: int | None = None
+    max_photos_per_inspection: int | None = None
+
+
+class UpdateInspectorRequest(BaseModel):
+    full_name: str | None = None
+    certification: str | None = None
+    is_active: bool | None = None
+    max_inspections: int | None = None
+    max_photos_per_inspection: int | None = None
+
+
+class ResetInspectorPasswordRequest(BaseModel):
+    password: str = Field(min_length=8)
