@@ -2,6 +2,14 @@
 apiVersion: v1
 data:
   schema.sql: |
+    -- Schéma de référence pour une base neuve (appliqué automatiquement par Postgres
+    -- via docker-entrypoint-initdb.d, docker-compose comme k8s, seulement si le volume
+    -- de données est vide). Pour toute base déjà existante — et pour tout changement de
+    -- schéma futur — ajouter un fichier numéroté dans backend/migrations/ : il sera
+    -- appliqué automatiquement au démarrage du backend (voir app/migrate.py). Garder ce
+    -- fichier synchronisé avec backend/migrations/ pour que les nouvelles bases partent
+    -- directement avec le schéma à jour.
+
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
     CREATE TABLE users (
