@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY worker ./worker
 COPY scripts ./scripts
+COPY migrations ./migrations
 
 ENV PYTHONUNBUFFERED=1
 

@@ -32,6 +32,7 @@ services:
       - ./backend/app:/app/app
       - ./backend/worker:/app/worker
       - ./backend/scripts:/app/scripts
+      - ./backend/migrations:/app/migrations
       - inspect_data:/data
     ports:
       - "8000:8000"

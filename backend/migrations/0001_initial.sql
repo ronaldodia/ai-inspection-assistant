@@ -1,28 +1,15 @@
--- Schéma de référence pour une base neuve (appliqué automatiquement par Postgres
--- via docker-entrypoint-initdb.d, docker-compose comme k8s, seulement si le volume
--- de données est vide). Pour toute base déjà existante — et pour tout changement de
--- schéma futur — ajouter un fichier numéroté dans backend/migrations/ : il sera
--- appliqué automatiquement au démarrage du backend (voir app/migrate.py). Garder ce
--- fichier synchronisé avec backend/migrations/ pour que les nouvelles bases partent
--- directement avec le schéma à jour.
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     certification VARCHAR(100),
-    role VARCHAR(20) NOT NULL DEFAULT 'inspector',
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    -- NULL = utilise la limite globale par défaut (voir app.config.Settings)
-    max_inspections INT,
-    max_photos_per_inspection INT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE inspections (
+CREATE TABLE IF NOT EXISTS inspections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     address VARCHAR(500) NOT NULL,
@@ -37,7 +24,7 @@ CREATE TABLE inspections (
     completed_at TIMESTAMPTZ
 );
 
-CREATE TABLE photos (
+CREATE TABLE IF NOT EXISTS photos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     inspection_id UUID NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
     client_photo_id VARCHAR(100) NOT NULL,
@@ -51,7 +38,7 @@ CREATE TABLE photos (
     UNIQUE (inspection_id, client_photo_id)
 );
 
-CREATE TABLE anomaly_detections (
+CREATE TABLE IF NOT EXISTS anomaly_detections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     photo_id UUID NOT NULL UNIQUE REFERENCES photos(id) ON DELETE CASCADE,
     anomalies JSONB NOT NULL DEFAULT '[]',
@@ -63,9 +50,9 @@ CREATE TABLE anomaly_detections (
     reviewed BOOLEAN NOT NULL DEFAULT false
 );
 
-CREATE SEQUENCE report_number_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS report_number_seq START 1;
 
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     inspection_id UUID NOT NULL UNIQUE REFERENCES inspections(id) ON DELETE CASCADE,
     report_number VARCHAR(50) UNIQUE,
@@ -74,7 +61,7 @@ CREATE TABLE reports (
     generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_inspections_user_id ON inspections(user_id);
-CREATE INDEX idx_inspections_status_created ON inspections(status, created_at) WHERE archived_at IS NULL;
-CREATE INDEX idx_photos_inspection_id ON photos(inspection_id);
-CREATE INDEX idx_anomaly_detections_gin ON anomaly_detections USING GIN (anomalies);
+CREATE INDEX IF NOT EXISTS idx_inspections_user_id ON inspections(user_id);
+CREATE INDEX IF NOT EXISTS idx_inspections_status_created ON inspections(status, created_at) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_photos_inspection_id ON photos(inspection_id);
+CREATE INDEX IF NOT EXISTS idx_anomaly_detections_gin ON anomaly_detections USING GIN (anomalies);

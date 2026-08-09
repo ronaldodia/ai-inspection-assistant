@@ -1,10 +1,20 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.migrate import run_migrations
 from app.routers import admin, auth, inspections, photos
 
-app = FastAPI(title="Inspect IA API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    run_migrations(settings.database_url)
+    yield
+
+
+app = FastAPI(title="Inspect IA API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
