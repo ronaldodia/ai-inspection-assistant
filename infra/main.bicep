@@ -117,6 +117,20 @@ resource postgresFirewallAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewa
   }
 }
 
+// Contrairement à Postgres auto-hébergé, Azure Database for PostgreSQL refuse
+// CREATE EXTENSION tant que l'extension n'est pas explicitement allow-listée ici
+// — même pour une extension standard comme pgcrypto (requise par schema.sql /
+// backend/migrations pour gen_random_uuid()). Sans ça, les migrations échouent
+// au tout premier démarrage du backend.
+resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-06-01-preview' = {
+  parent: postgres
+  name: 'azure.extensions'
+  properties: {
+    value: 'PGCRYPTO'
+    source: 'user-override'
+  }
+}
+
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: appServicePlanName
   location: location

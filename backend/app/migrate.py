@@ -37,6 +37,10 @@ def run_migrations(database_url: str) -> None:
         try:
             _apply_pending(conn)
         finally:
+            # Si une migration a échoué, la transaction est avortée — sans ce
+            # rollback, l'unlock ci-dessous échoue à son tour avec
+            # InFailedSqlTransaction et masque la vraie erreur dans les logs.
+            conn.rollback()
             with conn.cursor() as cur:
                 cur.execute("SELECT pg_advisory_unlock(%s)", (ADVISORY_LOCK_KEY,))
             conn.commit()
