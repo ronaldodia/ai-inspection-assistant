@@ -60,7 +60,7 @@ jobs:
 
       - name: Enregistrer les variables du dépôt pour le déploiement continu
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_VARIABLES_TOKEN }}
           DEPLOY_OUTPUTS: ${{ steps.deploy.outputs.outputs }}
         run: |
           set -euo pipefail
