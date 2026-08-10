@@ -95,15 +95,6 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
-      - name: Delete old backend image versions
-        if: github.event_name != 'pull_request'
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: ${{ github.event.repository.name }}-backend
-          package-type: container
-          min-versions-to-keep: 5
-          delete-only-untagged-versions: true
-
   build-frontend:
     runs-on: ubuntu-latest
     permissions:
@@ -140,15 +131,6 @@ jobs:
           tags: ${{ env.FRONTEND_IMAGE }}:${{ steps.vars.outputs.tag }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
-
-      - name: Delete old frontend image versions
-        if: github.event_name != 'pull_request'
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: ${{ github.event.repository.name }}-frontend
-          package-type: container
-          min-versions-to-keep: 5
-          delete-only-untagged-versions: true
 
   # NEXT_PUBLIC_API_URL est figé au build de l'image — la déploiement k8s et le
   # déploiement Azure App Service n'ont pas le même backend, donc le frontend a
@@ -193,15 +175,6 @@ jobs:
             ${{ env.FRONTEND_AZURE_IMAGE }}:latest
           cache-from: type=gha,scope=frontend-azure
           cache-to: type=gha,mode=max,scope=frontend-azure
-
-      - name: Delete old Azure frontend image versions
-        if: github.event_name != 'pull_request'
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: ${{ github.event.repository.name }}-frontend-azure
-          package-type: container
-          min-versions-to-keep: 5
-          delete-only-untagged-versions: true
 
   deploy-azure:
     needs: [build-backend, build-frontend-azure]
