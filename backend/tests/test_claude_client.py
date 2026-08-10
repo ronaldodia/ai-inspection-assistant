@@ -36,11 +36,12 @@ class FakeMessagesCreate:
         return self.response
 
 
-def _valid_analysis_json():
-    return json.dumps(
-        {
-            "overall_condition": "mauvais",
-            "anomalies": [
+def _photo_result(photo_index, overall_condition="mauvais", with_anomaly=True):
+    return {
+        "photo_index": photo_index,
+        "overall_condition": overall_condition,
+        "anomalies": (
+            [
                 {
                     "type": "moisissure",
                     "severity": "majeure",
@@ -48,46 +49,79 @@ def _valid_analysis_json():
                     "description": "desc",
                     "recommendation": "rec",
                 }
-            ],
-        }
-    )
+            ]
+            if with_anomaly
+            else []
+        ),
+    }
 
 
-def test_analyze_photo_parses_valid_response(monkeypatch):
-    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+def _valid_batch_json(*photo_indices):
+    return json.dumps({"photos": [_photo_result(i) for i in photo_indices]})
+
+
+def _photo_input(section_type="comble"):
+    return {"image_bytes": b"fake-bytes", "media_type": "image/jpeg", "section_type": section_type}
+
+
+def test_analyze_photos_batch_parses_single_photo_response(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_batch_json(1))]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
-    result = claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+    result = claude_client.analyze_photos_batch([_photo_input()])
 
-    assert result["overall_condition"] == "mauvais"
-    assert len(result["anomalies"]) == 1
+    assert len(result["results"]) == 1
+    assert result["results"][0]["overall_condition"] == "mauvais"
+    assert len(result["results"][0]["anomalies"]) == 1
     assert result["_usage"] == {"input_tokens": 100, "output_tokens": 50, "model": "claude-opus-5"}
 
 
-def test_analyze_photo_uses_french_section_label_in_prompt(monkeypatch):
-    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+def test_analyze_photos_batch_returns_results_in_order(monkeypatch):
+    # Réponse du modèle volontairement désordonnée (3, 1, 2) — le client doit
+    # la retrier pour correspondre à l'ordre des photos envoyées.
+    body = json.dumps({"photos": [_photo_result(3), _photo_result(1), _photo_result(2)]})
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", body)]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
-    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "vide_sanitaire")
+    result = claude_client.analyze_photos_batch([_photo_input(), _photo_input(), _photo_input()])
 
-    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert [r["photo_index"] for r in result["results"]] == [1, 2, 3]
+
+
+def test_analyze_photos_batch_uses_french_section_label_in_prompt(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_batch_json(1))]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photos_batch([_photo_input(section_type="vide_sanitaire")])
+
+    content = fake_create.last_kwargs["messages"][0]["content"]
+    prompt_text = content[0]["text"]
     assert "Vide sanitaire" in prompt_text
 
 
-def test_analyze_photo_raises_when_no_text_block(monkeypatch):
+def test_analyze_photos_batch_raises_when_no_text_block(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("other")]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
     with pytest.raises(RuntimeError):
-        claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+        claude_client.analyze_photos_batch([_photo_input()])
 
 
-def test_analyze_photo_raises_on_invalid_json(monkeypatch):
+def test_analyze_photos_batch_raises_on_invalid_json(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", "not valid json")]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
     with pytest.raises(RuntimeError):
-        claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+        claude_client.analyze_photos_batch([_photo_input()])
+
+
+def test_analyze_photos_batch_raises_on_missing_results(monkeypatch):
+    # Deux photos envoyées, une seule reçue en retour.
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_batch_json(1))]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    with pytest.raises(RuntimeError):
+        claude_client.analyze_photos_batch([_photo_input(), _photo_input()])
 
 
 def test_synthesize_report_returns_text(monkeypatch):

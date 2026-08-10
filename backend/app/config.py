@@ -23,5 +23,10 @@ class Settings(BaseSettings):
     default_max_inspections: int = 100
     default_max_photos_per_inspection: int = 50
 
+    # Nombre de photos envoyées par appel Claude — réduit le nombre d'appels
+    # (donc le coût fixe par appel) sans envoyer un lot trop gros pour que le
+    # modèle garde une attention fine par photo.
+    photo_batch_size: int = 4
+
 
 settings = Settings()
