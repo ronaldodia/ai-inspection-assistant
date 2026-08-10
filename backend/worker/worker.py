@@ -8,7 +8,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
-from app.claude_client import analyze_photos_batch, synthesize_report
+from app.claude_client import analyze_photo, synthesize_report
 from app.config import settings
 from app.storage import storage
 
@@ -62,55 +62,43 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
     all_anomalies: list[dict] = []
     section_types: list[str] = []
 
-    for batch_start in range(0, len(photos), settings.photo_batch_size):
-        batch = photos[batch_start : batch_start + settings.photo_batch_size]
+    for photo in photos:
+        ext = photo["storage_path"].rsplit(".", 1)[-1].lower()
+        media_type = MEDIA_TYPES.get(ext, "image/jpeg")
 
-        batch_input = []
-        for photo in batch:
-            ext = photo["storage_path"].rsplit(".", 1)[-1].lower()
-            media_type = MEDIA_TYPES.get(ext, "image/jpeg")
-            image_bytes = storage.read("photos", photo["storage_path"])
-            if image_bytes is None:
-                raise RuntimeError(f"Photo introuvable dans le stockage: {photo['storage_path']}")
-            batch_input.append(
-                {"image_bytes": image_bytes, "media_type": media_type, "section_type": photo["section_type"]}
+        image_bytes = storage.read("photos", photo["storage_path"])
+        if image_bytes is None:
+            raise RuntimeError(f"Photo introuvable dans le stockage: {photo['storage_path']}")
+
+        section_types.append(photo["section_type"])
+        result = analyze_photo(image_bytes, media_type, photo["section_type"])
+        usage = result.pop("_usage")
+        all_anomalies.extend(result["anomalies"])
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO anomaly_detections
+                    (photo_id, anomalies, overall_condition, input_tokens, output_tokens, model)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (photo_id) DO UPDATE SET
+                    anomalies = EXCLUDED.anomalies,
+                    overall_condition = EXCLUDED.overall_condition,
+                    input_tokens = EXCLUDED.input_tokens,
+                    output_tokens = EXCLUDED.output_tokens,
+                    model = EXCLUDED.model,
+                    detected_at = now()
+                """,
+                (
+                    photo["id"],
+                    Json(result["anomalies"]),
+                    result["overall_condition"],
+                    usage["input_tokens"],
+                    usage["output_tokens"],
+                    usage["model"],
+                ),
             )
-
-        batch_response = analyze_photos_batch(batch_input)
-        usage = batch_response["_usage"]
-        # Un seul appel Claude couvre tout le lot — pas de décompte de tokens
-        # natif par photo côté API, donc on répartit à parts égales.
-        input_tokens_share = usage["input_tokens"] // len(batch)
-        output_tokens_share = usage["output_tokens"] // len(batch)
-
-        for photo, result in zip(batch, batch_response["results"]):
-            section_types.append(photo["section_type"])
-            all_anomalies.extend(result["anomalies"])
-
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO anomaly_detections
-                        (photo_id, anomalies, overall_condition, input_tokens, output_tokens, model)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (photo_id) DO UPDATE SET
-                        anomalies = EXCLUDED.anomalies,
-                        overall_condition = EXCLUDED.overall_condition,
-                        input_tokens = EXCLUDED.input_tokens,
-                        output_tokens = EXCLUDED.output_tokens,
-                        model = EXCLUDED.model,
-                        detected_at = now()
-                    """,
-                    (
-                        photo["id"],
-                        Json(result["anomalies"]),
-                        result["overall_condition"],
-                        input_tokens_share,
-                        output_tokens_share,
-                        usage["model"],
-                    ),
-                )
-            conn.commit()
+        conn.commit()
 
     synthesis = synthesize_report(inspection["address"], section_types, all_anomalies)
 
