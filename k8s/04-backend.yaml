@@ -17,7 +17,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: backend
-          image: ghcr.io/ronaldodia/ai-inspection-assistant-backend:sha-9f32f30
+          image: ghcr.io/ronaldodia/ai-inspection-assistant-backend:sha-0878d54
           ports:
             - containerPort: 8000
           envFrom:
