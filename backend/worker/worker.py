@@ -10,6 +10,7 @@ from psycopg.types.json import Json
 
 from app.claude_client import analyze_photo, synthesize_report
 from app.config import settings
+from app.storage import storage
 
 POLL_INTERVAL_SECONDS = 3
 MEDIA_TYPES = {
@@ -62,12 +63,12 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
     section_types: list[str] = []
 
     for photo in photos:
-        abs_path = os.path.join(settings.photos_dir, photo["storage_path"])
         ext = photo["storage_path"].rsplit(".", 1)[-1].lower()
         media_type = MEDIA_TYPES.get(ext, "image/jpeg")
 
-        with open(abs_path, "rb") as f:
-            image_bytes = f.read()
+        image_bytes = storage.read("photos", photo["storage_path"])
+        if image_bytes is None:
+            raise RuntimeError(f"Photo introuvable dans le stockage: {photo['storage_path']}")
 
         section_types.append(photo["section_type"])
         result = analyze_photo(image_bytes, media_type, photo["section_type"])
