@@ -28,6 +28,7 @@ export default function CapturePage() {
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [photoLimit, setPhotoLimit] = useState<number | null>(null)
 
   const refreshPhotos = useCallback(async () => {
     const stored = await getAllPhotosForInspection(inspectionId)
@@ -37,6 +38,14 @@ export default function CapturePage() {
   useEffect(() => {
     refreshPhotos()
   }, [refreshPhotos])
+
+  useEffect(() => {
+    if (!token) return
+    api
+      .getProfile()
+      .then((p) => setPhotoLimit(p.effective_max_photos_per_inspection ?? null))
+      .catch(() => {})
+  }, [token])
 
   useEffect(() => {
     const urls: Record<string, string> = {}
@@ -58,7 +67,12 @@ export default function CapturePage() {
     setError(null)
     let firstError: string | null = null
     try {
-      const pending = (await getAllPhotosForInspection(inspectionId)).filter((p) => !p.uploaded)
+      // Trié par ordre de capture : en cas de limite atteinte, ce sont toujours
+      // les photos les plus récentes qui échouent, jamais un sous-ensemble
+      // arbitraire — cohérent avec ce que "Supprimer les photos en trop" retire.
+      const pending = (await getAllPhotosForInspection(inspectionId))
+        .filter((p) => !p.uploaded)
+        .sort((a, b) => a.photoOrder - b.photoOrder)
       for (const p of pending) {
         const formData = new FormData()
         formData.append('file', p.blob, `${p.clientPhotoId}.jpg`)
@@ -107,9 +121,12 @@ export default function CapturePage() {
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setError(null)
+    const remaining = photoLimit != null ? Math.max(0, photoLimit - photos.length) : Infinity
+    const incoming = Array.from(files)
+    const accepted = incoming.slice(0, remaining)
     const startOrder = photos.length
     let index = 0
-    for (const file of Array.from(files)) {
+    for (const file of accepted) {
       try {
         const blob = await compressImage(file)
         const clientPhotoId = crypto.randomUUID()
@@ -130,12 +147,39 @@ export default function CapturePage() {
       }
     }
     await refreshPhotos()
-    if (navigator.onLine) syncPhotos()
+    const rejectedCount = incoming.length - accepted.length
+    if (rejectedCount > 0) {
+      setError(
+        `Limite de ${photoLimit} photos atteinte pour cette inspection — ${rejectedCount} photo${
+          rejectedCount > 1 ? 's' : ''
+        } non ajoutée${rejectedCount > 1 ? 's' : ''}.`
+      )
+    } else if (navigator.onLine) {
+      syncPhotos()
+    }
   }
 
   async function handleRemove(clientPhotoId: string) {
     await deletePhoto(clientPhotoId)
     await refreshPhotos()
+  }
+
+  // Combien de photos en attente dépassent la capacité restante côté serveur —
+  // seules les photos jamais synchronisées peuvent être retirées (une fois
+  // uploadée, une photo fait partie de l'inspection, il n'y a pas d'API pour
+  // la retirer côté serveur).
+  const uploadedCount = photos.filter((p) => p.uploaded).length
+  const pendingCount = photos.filter((p) => !p.uploaded).length
+  const remainingCapacity = photoLimit != null ? Math.max(0, photoLimit - uploadedCount) : Infinity
+  const excessCount = photoLimit != null ? Math.max(0, pendingCount - remainingCapacity) : 0
+
+  async function handleRemoveExcess() {
+    const pendingByNewest = photos.filter((p) => !p.uploaded).sort((a, b) => b.photoOrder - a.photoOrder)
+    for (const p of pendingByNewest.slice(0, excessCount)) {
+      await deletePhoto(p.clientPhotoId)
+    }
+    await refreshPhotos()
+    setError(null)
   }
 
   async function handleFinish() {
@@ -162,8 +206,6 @@ export default function CapturePage() {
 
   if (!token) return null
 
-  const pendingCount = photos.filter((p) => !p.uploaded).length
-
   return (
     <div className="min-h-screen bg-stone-50 pb-24">
       <header className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
@@ -181,9 +223,26 @@ export default function CapturePage() {
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         <p className="text-sm text-stone-600">
-          {photos.length} photo{photos.length !== 1 ? 's' : ''} capturée{photos.length !== 1 ? 's' : ''}
+          {photos.length} photo{photos.length !== 1 ? 's' : ''}
+          {photoLimit != null && ` / ${photoLimit}`} capturée{photos.length !== 1 ? 's' : ''}
           {pendingCount > 0 && ` — ${pendingCount} en attente de synchronisation`}
         </p>
+
+        {excessCount > 0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 space-y-2">
+            <p>
+              {excessCount} photo{excessCount > 1 ? 's' : ''} dépasse{excessCount > 1 ? 'nt' : ''} la limite de{' '}
+              {photoLimit} pour cette inspection et ne pourra{excessCount > 1 ? 'nt' : ''} pas être synchronisée
+              {excessCount > 1 ? 's' : ''}.
+            </p>
+            <button
+              onClick={handleRemoveExcess}
+              className="rounded border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+            >
+              Supprimer les {excessCount} photo{excessCount > 1 ? 's' : ''} en trop
+            </button>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-2">Section en cours</label>
@@ -220,9 +279,12 @@ export default function CapturePage() {
 
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium"
+          disabled={photoLimit != null && photos.length >= photoLimit}
+          className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          📷 Ajouter des photos
+          {photoLimit != null && photos.length >= photoLimit
+            ? `Limite de ${photoLimit} photos atteinte`
+            : '📷 Ajouter des photos'}
         </button>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

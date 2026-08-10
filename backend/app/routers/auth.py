@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.db import get_conn
 from app.deps import get_current_user
+from app.limits import effective_inspection_limit, effective_photo_limit
 from app.schemas import LoginRequest, TokenResponse, UpdateProfileRequest
 from app.security import create_access_token, verify_password
 
@@ -24,7 +25,11 @@ def login(data: LoginRequest, conn: psycopg.Connection = Depends(get_conn)):
 
 @router.get("/me")
 def get_profile(user=Depends(get_current_user)):
-    return user
+    return {
+        **dict(user),
+        "effective_max_inspections": effective_inspection_limit(user),
+        "effective_max_photos_per_inspection": effective_photo_limit(user),
+    }
 
 
 @router.patch("/me")
