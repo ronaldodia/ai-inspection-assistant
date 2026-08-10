@@ -180,6 +180,10 @@ resource workerApp 'Microsoft.Web/sites@2023-01-01' = {
       appCommandLine: 'python -m worker.worker'
       alwaysOn: true
       appSettings: concat(registrySettings, [
+        // Le worker n'est pas un serveur HTTP, mais App Service tue le
+        // conteneur si rien n'écoute sur le port attendu — worker.py démarre
+        // un listener HTTP minimal juste pour satisfaire cette sonde.
+        { name: 'WEBSITES_PORT', value: '8000' }
         { name: 'DATABASE_URL', value: databaseUrl }
         { name: 'SECRET_KEY', value: secretKey }
         { name: 'ANTHROPIC_API_KEY', value: anthropicApiKey }

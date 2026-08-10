@@ -1,6 +1,8 @@
 import os
+import threading
 import time
 import traceback
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import psycopg
 from psycopg.rows import dict_row
@@ -141,5 +143,25 @@ def run() -> None:
             conn.close()
 
 
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format: str, *args) -> None:  # noqa: A002 - imposé par BaseHTTPRequestHandler
+        pass
+
+
+def _start_health_server() -> None:
+    # Le worker n'a pas de serveur HTTP par nature (il ne fait que poller
+    # Postgres) — mais Azure App Service tue le conteneur si rien n'écoute
+    # sur le port attendu (voir EXPOSE 8000 dans le Dockerfile). Ce serveur
+    # ne fait qu'exister pour satisfaire cette sonde de démarrage/liveness ;
+    # il n'a aucun rôle fonctionnel.
+    port = int(os.environ.get("PORT", 8000))
+    HTTPServer(("0.0.0.0", port), _HealthHandler).serve_forever()
+
+
 if __name__ == "__main__":
+    threading.Thread(target=_start_health_server, daemon=True).start()
     run()
