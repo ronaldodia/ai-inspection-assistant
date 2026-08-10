@@ -49,10 +49,14 @@ export default function CapturePage() {
     }
   }, [photos])
 
-  const syncPhotos = useCallback(async () => {
-    if (!navigator.onLine) return
+  // Retourne true si toutes les photos en attente ont bien été synchronisées —
+  // handleFinish s'en sert pour ne jamais mettre en file d'attente une
+  // inspection à qui il manque des photos (ex. limite de photos atteinte).
+  const syncPhotos = useCallback(async (): Promise<boolean> => {
+    if (!navigator.onLine) return false
     setSyncing(true)
     setError(null)
+    let firstError: string | null = null
     try {
       const pending = (await getAllPhotosForInspection(inspectionId)).filter((p) => !p.uploaded)
       for (const p of pending) {
@@ -64,12 +68,21 @@ export default function CapturePage() {
         if (p.lat != null) formData.append('lat', String(p.lat))
         if (p.lon != null) formData.append('lon', String(p.lon))
         if (p.takenAt) formData.append('taken_at', p.takenAt)
-        await api.uploadPhoto(inspectionId, formData)
-        await markUploaded(p.clientPhotoId)
+        try {
+          await api.uploadPhoto(inspectionId, formData)
+          await markUploaded(p.clientPhotoId)
+        } catch (err) {
+          // Isolée par photo : un échec (ex. limite atteinte) ne doit pas
+          // empêcher les autres photos en attente d'être tentées.
+          firstError = firstError ?? (err instanceof Error ? err.message : 'Erreur de synchronisation')
+        }
       }
       await refreshPhotos()
+      if (firstError) setError(firstError)
+      return firstError === null
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de synchronisation')
+      return false
     } finally {
       setSyncing(false)
     }
@@ -133,7 +146,8 @@ export default function CapturePage() {
         setError('Des photos ne sont pas encore synchronisées. Reconnectez-vous avant de terminer.')
         return
       }
-      await syncPhotos()
+      const synced = await syncPhotos()
+      if (!synced) return
     }
     setFinishing(true)
     try {
