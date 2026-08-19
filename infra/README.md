@@ -64,6 +64,7 @@ az ad app federated-credential create \
 | `AZURE_POSTGRES_ADMIN_PASSWORD` | mot de passe fort pour l'administrateur Postgres |
 | `BACKEND_SECRET_KEY` | `openssl rand -hex 32` — clé de signature JWT de **cet environnement** (distincte de celle du déploiement k8s) |
 | `ANTHROPIC_API_KEY` | clé API Anthropic |
+| `VOYAGE_API_KEY` | clé API Voyage AI (embeddings du RAG Code du bâtiment/AIBQ, voir `backend/app/knowledge.py`) |
 | `GHCR_PULL_USERNAME` | votre user GitHub — uniquement si les packages `ghcr.io/ronaldodia/ai-inspection-assistant-*` restent privés, sinon laisser non défini |
 | `GHCR_PULL_TOKEN` | PAT avec le scope `read:packages` — idem |
 
@@ -98,6 +99,7 @@ az deployment group create \
     postgresAdminPassword='<mot-de-passe-fort>' \
     secretKey="$(openssl rand -hex 32)" \
     anthropicApiKey='sk-ant-...' \
+    voyageApiKey='pa-...' \
     registryUsername='<votre-user-github>' \
     registryPassword='<PAT-avec-read:packages>'
 ```
@@ -151,7 +153,7 @@ python -m scripts.create_user --email inspecteur@example.com --password "..." --
 
 `NEXT_PUBLIC_API_URL` est figé dans le bundle JavaScript au moment du `next
 build` (voir `frontend/Dockerfile`), pas lu au runtime. L'image frontend déjà
-publiée pour microk8s pointe vers `api.inspect.evoluops.com` — la réutiliser sur
+publiée pour microk8s pointe vers `api.inspectra.dev.evoluops.com` — la réutiliser sur
 Azure App Service ferait appeler le mauvais backend. D'où
 `ghcr.io/ronaldodia/ai-inspection-assistant-frontend-azure`, buildée avec
 `AZURE_NEXT_PUBLIC_API_URL` comme `NEXT_PUBLIC_API_URL`.

@@ -7,3 +7,4 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
+os.environ.setdefault("VOYAGE_API_KEY", "test-voyage-key")

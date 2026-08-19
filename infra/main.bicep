@@ -6,7 +6,7 @@
 //
 // Déploiement (dans un resource group existant) :
 //   az deployment group create -g <resource-group> -f infra/main.bicep \
-//     --parameters postgresAdminPassword=<...> secretKey=<...> anthropicApiKey=<...>
+//     --parameters postgresAdminPassword=<...> secretKey=<...> anthropicApiKey=<...> voyageApiKey=<...>
 
 @description('Préfixe utilisé pour nommer les ressources')
 param baseName string = 'inspect-ia'
@@ -26,6 +26,9 @@ param secretKey string
 
 @secure()
 param anthropicApiKey string
+
+@secure()
+param voyageApiKey string
 
 @description('Image backend/worker (même image, commande de démarrage différente pour le worker)')
 param backendImage string = 'ghcr.io/ronaldodia/ai-inspection-assistant-backend:latest'
@@ -126,7 +129,7 @@ resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configura
   parent: postgres
   name: 'azure.extensions'
   properties: {
-    value: 'PGCRYPTO'
+    value: 'PGCRYPTO,VECTOR'
     source: 'user-override'
   }
 }
@@ -159,6 +162,7 @@ resource backendApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'DATABASE_URL', value: databaseUrl }
         { name: 'SECRET_KEY', value: secretKey }
         { name: 'ANTHROPIC_API_KEY', value: anthropicApiKey }
+        { name: 'VOYAGE_API_KEY', value: voyageApiKey }
         { name: 'STORAGE_BACKEND', value: 'azure' }
         { name: 'AZURE_STORAGE_CONNECTION_STRING', value: storageConnectionString }
         { name: 'AZURE_PHOTOS_CONTAINER', value: photosContainerName }
@@ -187,6 +191,7 @@ resource workerApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'DATABASE_URL', value: databaseUrl }
         { name: 'SECRET_KEY', value: secretKey }
         { name: 'ANTHROPIC_API_KEY', value: anthropicApiKey }
+        { name: 'VOYAGE_API_KEY', value: voyageApiKey }
         { name: 'STORAGE_BACKEND', value: 'azure' }
         { name: 'AZURE_STORAGE_CONNECTION_STRING', value: storageConnectionString }
         { name: 'AZURE_PHOTOS_CONTAINER', value: photosContainerName }

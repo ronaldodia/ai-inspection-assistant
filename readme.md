@@ -363,9 +363,12 @@ Le contrôleur ingress (classe `nginx`) et le `ClusterIssuer` cert-manager
 `cert-manager` de microk8s ne sont à activer ici, et ce dépôt ne gère pas ces ressources
 (pas de manifest `ClusterIssuer` dans `k8s/`, l'ingress y référence juste
 `letsencrypt-prod` par son nom). Les manifests utilisent `ingressClassName: nginx` avec
-les hosts `inspect.evoluops.com` (frontend) et `api.inspect.evoluops.com`
-(backend) — un enregistrement DNS wildcard `*.evoluops.com` doit pointer vers l'IP du
-contrôleur.
+les hosts `inspectra.dev.evoluops.com` (frontend) et `api.inspectra.dev.evoluops.com`
+(backend) — microk8s est l'environnement **dev** (voir
+[infra/README.md](infra/README.md) pour l'environnement principal sur Azure App
+Service). Le wildcard `*.evoluops.com` déjà en place ne couvre pas ce sous-domaine
+à deux niveaux : un enregistrement DNS dédié pour `*.dev.evoluops.com` (ou les deux
+hosts explicitement) doit pointer vers l'IP du contrôleur.
 
 ArgoCD doit être installé et configuré pour surveiller le dossier `k8s/` de ce dépôt
 (sync automatique). Le registre local microk8s n'est plus utilisé — les images sont
@@ -386,7 +389,7 @@ manuel pour déployer une nouvelle version.
 
 À configurer une fois dans les paramètres du dépôt GitHub :
 - **Settings > Secrets and variables > Actions > Variables** (optionnel) :
-  `NEXT_PUBLIC_API_URL` — le workflow utilise déjà `https://api.inspect.evoluops.com`
+  `NEXT_PUBLIC_API_URL` — le workflow utilise déjà `https://api.inspectra.dev.evoluops.com`
   par défaut si cette variable n'est pas définie ; ne la définir que si ce host change.
 - Si les packages `ghcr.io/ronaldodia/ai-inspection-assistant-*` restent privés, créer le
   secret `ghcr-pull-secret` dans le cluster — voir
@@ -401,6 +404,9 @@ kubectl apply -f k8s/01c-postgres-init-configmap.yaml
 
 cp k8s/01-secrets.example.yaml k8s/01-secrets.yaml
 # éditer k8s/01-secrets.yaml avec des vraies valeurs (ne jamais commit ce fichier)
+# — doit inclure VOYAGE_API_KEY depuis https://dashboard.voyageai.com (utilisé par
+# app.knowledge pour le RAG Code du bâtiment/AIBQ) en plus des clés existantes,
+# sinon le backend et le worker refusent de démarrer (voir app/config.py).
 kubectl apply -f k8s/01-secrets.yaml
 
 # uniquement si les packages GHCR restent privés — voir k8s/01b-ghcr-pull-secret.example.yaml

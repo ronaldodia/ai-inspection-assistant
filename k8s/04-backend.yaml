@@ -29,7 +29,7 @@ spec:
             - name: REPORTS_DIR
               value: /data/reports
             - name: CORS_ORIGINS
-              value: '["https://inspect.evoluops.com"]'
+              value: '["https://inspectra.dev.evoluops.com"]'
           volumeMounts:
             - name: data
               mountPath: /data
