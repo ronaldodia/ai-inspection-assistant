@@ -366,9 +366,26 @@ Le contrôleur ingress (classe `nginx`) et le `ClusterIssuer` cert-manager
 les hosts `inspectra.dev.evoluops.com` (frontend) et `api.inspectra.dev.evoluops.com`
 (backend) — microk8s est l'environnement **dev** (voir
 [infra/README.md](infra/README.md) pour l'environnement principal sur Azure App
-Service). Le wildcard `*.evoluops.com` déjà en place ne couvre pas ce sous-domaine
-à deux niveaux : un enregistrement DNS dédié pour `*.dev.evoluops.com` (ou les deux
-hosts explicitement) doit pointer vers l'IP du contrôleur.
+Service, qui reste sur son host `*.azurewebsites.net` par défaut — pas de domaine
+personnalisé ni de config DNS/CORS supplémentaire à faire côté prod pour l'instant).
+
+Le wildcard `*.evoluops.com` déjà en place ne couvre pas `inspectra.dev.evoluops.com`
+(sous-domaine à deux niveaux) : un enregistrement DNS dédié est requis chez le
+registrar, à créer une fois — récupérer d'abord l'IP externe du contrôleur ingress :
+
+```bash
+kubectl get svc -n <namespace-du-controleur-ingress> -l app.kubernetes.io/component=controller
+# EXTERNAL-IP de ce service
+```
+
+puis créer, au choix :
+- un enregistrement A wildcard `*.dev.evoluops.com` → cette IP (couvre aussi de
+  futurs sous-domaines dev sans repasser par le registrar), ou
+- deux enregistrements A explicites `inspectra.dev.evoluops.com` et
+  `api.inspectra.dev.evoluops.com` → cette IP.
+
+`kubectl apply -f k8s/07-ingress.yaml` échouera à obtenir un certificat (challenge
+Let's Encrypt HTTP-01) tant que ce DNS n'est pas propagé.
 
 ArgoCD doit être installé et configuré pour surveiller le dossier `k8s/` de ce dépôt
 (sync automatique). Le registre local microk8s n'est plus utilisé — les images sont
