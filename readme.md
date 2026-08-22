@@ -395,14 +395,19 @@ construites et publiées sur GitHub Container Registry (voir plus bas).
 
 Le workflow [`build-and-push.yaml`](.github/workflows/build-and-push.yaml) construit et
 publie `ghcr.io/ronaldodia/ai-inspection-assistant-{backend,frontend}` à chaque push sur
-`main`, tag les images avec le hash de commit (`sha-xxxxxxx`), puis commit lui-même la
-mise à jour des tags dans `k8s/04-backend.yaml`, `k8s/05-worker.yaml` et
-`k8s/06-frontend.yaml`, ainsi que la régénération de
+`main` **ou `dev`** (`dev` = microk8s, `main` = Azure App Service — voir
+[infra/README.md](infra/README.md)), tag les images avec le hash de commit
+(`sha-xxxxxxx`), puis commit lui-même la mise à jour des tags dans `k8s/04-backend.yaml`,
+`k8s/05-worker.yaml` et `k8s/06-frontend.yaml`, ainsi que la régénération de
 [`k8s/01c-postgres-init-configmap.yaml`](k8s/01c-postgres-init-configmap.yaml) depuis
 `backend/schema.sql` (ce fichier ne doit jamais être édité à la main — toute évolution du
 schéma passe par `backend/schema.sql`, la ConfigMap suit automatiquement). ArgoCD détecte
 ce commit et synchronise le cluster — plus besoin de `docker build`/`push`/`kubectl apply`
 manuel pour déployer une nouvelle version.
+
+Le tag `:latest` de l'image backend et le déploiement Azure (`build-frontend-azure`,
+`deploy-azure`) restent réservés à `main` — un push sur `dev` ne construit et ne déploie
+que les images microk8s, jamais l'environnement Azure.
 
 À configurer une fois dans les paramètres du dépôt GitHub :
 - **Settings > Secrets and variables > Actions > Variables** (optionnel) :
