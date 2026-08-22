@@ -57,6 +57,17 @@ var frontendUrl = 'https://${frontendAppName}.azurewebsites.net'
 var backendUrl = 'https://${backendAppName}.azurewebsites.net'
 var databaseUrl = 'postgresql://${postgresAdminLogin}:${postgresAdminPassword}@${postgresServerName}.postgres.database.azure.com:5432/${postgresDatabaseName}?sslmode=require'
 
+// Domaines personnalisés liés manuellement à frontendApp (hostNameBindings +
+// certificat managé) via CLI, en dehors de ce Bicep — voir infra/README.md. Le
+// host *.azurewebsites.net par défaut reste dans la liste car il répond toujours
+// (binding par défaut jamais retiré), même si le trafic public passe maintenant
+// par les domaines personnalisés. Ajouter ici tout nouveau domaine lié côté CLI.
+var corsOrigins = [
+  frontendUrl
+  'https://inspectra.evoluops.com'
+  'https://www.inspectra.evoluops.com'
+]
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
   location: location
@@ -167,7 +178,7 @@ resource backendApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'AZURE_STORAGE_CONNECTION_STRING', value: storageConnectionString }
         { name: 'AZURE_PHOTOS_CONTAINER', value: photosContainerName }
         { name: 'AZURE_REPORTS_CONTAINER', value: reportsContainerName }
-        { name: 'CORS_ORIGINS', value: '["${frontendUrl}"]' }
+        { name: 'CORS_ORIGINS', value: string(corsOrigins) }
       ])
     }
   }
