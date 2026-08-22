@@ -363,9 +363,29 @@ Le contrôleur ingress (classe `nginx`) et le `ClusterIssuer` cert-manager
 `cert-manager` de microk8s ne sont à activer ici, et ce dépôt ne gère pas ces ressources
 (pas de manifest `ClusterIssuer` dans `k8s/`, l'ingress y référence juste
 `letsencrypt-prod` par son nom). Les manifests utilisent `ingressClassName: nginx` avec
-les hosts `inspect.evoluops.com` (frontend) et `api.inspect.evoluops.com`
-(backend) — un enregistrement DNS wildcard `*.evoluops.com` doit pointer vers l'IP du
-contrôleur.
+les hosts `inspectra.dev.evoluops.com` (frontend) et `api.inspectra.dev.evoluops.com`
+(backend) — microk8s est l'environnement **dev** (voir
+[infra/README.md](infra/README.md) pour l'environnement principal sur Azure App
+Service, qui reste sur son host `*.azurewebsites.net` par défaut — pas de domaine
+personnalisé ni de config DNS/CORS supplémentaire à faire côté prod pour l'instant).
+
+Le wildcard `*.evoluops.com` déjà en place ne couvre pas `inspectra.dev.evoluops.com`
+(sous-domaine à deux niveaux) : un enregistrement DNS dédié est requis chez le
+registrar, à créer une fois — récupérer d'abord l'IP externe du contrôleur ingress :
+
+```bash
+kubectl get svc -n <namespace-du-controleur-ingress> -l app.kubernetes.io/component=controller
+# EXTERNAL-IP de ce service
+```
+
+puis créer, au choix :
+- un enregistrement A wildcard `*.dev.evoluops.com` → cette IP (couvre aussi de
+  futurs sous-domaines dev sans repasser par le registrar), ou
+- deux enregistrements A explicites `inspectra.dev.evoluops.com` et
+  `api.inspectra.dev.evoluops.com` → cette IP.
+
+`kubectl apply -f k8s/07-ingress.yaml` échouera à obtenir un certificat (challenge
+Let's Encrypt HTTP-01) tant que ce DNS n'est pas propagé.
 
 ArgoCD doit être installé et configuré pour surveiller le dossier `k8s/` de ce dépôt
 (sync automatique). Le registre local microk8s n'est plus utilisé — les images sont
@@ -375,18 +395,23 @@ construites et publiées sur GitHub Container Registry (voir plus bas).
 
 Le workflow [`build-and-push.yaml`](.github/workflows/build-and-push.yaml) construit et
 publie `ghcr.io/ronaldodia/ai-inspection-assistant-{backend,frontend}` à chaque push sur
-`main`, tag les images avec le hash de commit (`sha-xxxxxxx`), puis commit lui-même la
-mise à jour des tags dans `k8s/04-backend.yaml`, `k8s/05-worker.yaml` et
-`k8s/06-frontend.yaml`, ainsi que la régénération de
+`main` **ou `dev`** (`dev` = microk8s, `main` = Azure App Service — voir
+[infra/README.md](infra/README.md)), tag les images avec le hash de commit
+(`sha-xxxxxxx`), puis commit lui-même la mise à jour des tags dans `k8s/04-backend.yaml`,
+`k8s/05-worker.yaml` et `k8s/06-frontend.yaml`, ainsi que la régénération de
 [`k8s/01c-postgres-init-configmap.yaml`](k8s/01c-postgres-init-configmap.yaml) depuis
 `backend/schema.sql` (ce fichier ne doit jamais être édité à la main — toute évolution du
 schéma passe par `backend/schema.sql`, la ConfigMap suit automatiquement). ArgoCD détecte
 ce commit et synchronise le cluster — plus besoin de `docker build`/`push`/`kubectl apply`
 manuel pour déployer une nouvelle version.
 
+Le tag `:latest` de l'image backend et le déploiement Azure (`build-frontend-azure`,
+`deploy-azure`) restent réservés à `main` — un push sur `dev` ne construit et ne déploie
+que les images microk8s, jamais l'environnement Azure.
+
 À configurer une fois dans les paramètres du dépôt GitHub :
 - **Settings > Secrets and variables > Actions > Variables** (optionnel) :
-  `NEXT_PUBLIC_API_URL` — le workflow utilise déjà `https://api.inspect.evoluops.com`
+  `NEXT_PUBLIC_API_URL` — le workflow utilise déjà `https://api.inspectra.dev.evoluops.com`
   par défaut si cette variable n'est pas définie ; ne la définir que si ce host change.
 - Si les packages `ghcr.io/ronaldodia/ai-inspection-assistant-*` restent privés, créer le
   secret `ghcr-pull-secret` dans le cluster — voir
@@ -401,6 +426,9 @@ kubectl apply -f k8s/01c-postgres-init-configmap.yaml
 
 cp k8s/01-secrets.example.yaml k8s/01-secrets.yaml
 # éditer k8s/01-secrets.yaml avec des vraies valeurs (ne jamais commit ce fichier)
+# — doit inclure VOYAGE_API_KEY depuis https://dashboard.voyageai.com (utilisé par
+# app.knowledge pour le RAG Code du bâtiment/AIBQ) en plus des clés existantes,
+# sinon le backend et le worker refusent de démarrer (voir app/config.py).
 kubectl apply -f k8s/01-secrets.yaml
 
 # uniquement si les packages GHCR restent privés — voir k8s/01b-ghcr-pull-secret.example.yaml

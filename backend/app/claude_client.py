@@ -5,6 +5,7 @@ import anthropic
 
 from app.config import settings
 from app.constants import section_label
+from app.knowledge import get_context_for_section
 
 _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
@@ -72,6 +73,21 @@ priorité, et termine par une recommandation générale. N'invente rien au-delà
 anomalies fournies."""
 
 
+def _build_analysis_prompt(section_type: str) -> str:
+    prompt = f"Section du bâtiment inspectée : {section_label(section_type)}. Analyse cette photo."
+
+    context = get_context_for_section(section_type)
+    if context:
+        prompt += (
+            "\n\nExtraits pertinents du Code de construction du Québec et de la norme "
+            f"de pratique AIBQ pour cette section :\n{context}\n\n"
+            "Utilise ces extraits uniquement s'ils sont pertinents à ce que tu observes "
+            "sur la photo. Ne cite jamais un article ou une référence qui n'apparaît pas "
+            "explicitement ci-dessus — si aucun extrait n'est pertinent, ignore-les."
+        )
+    return prompt
+
+
 def analyze_photo(image_bytes: bytes, media_type: str, section_type: str) -> dict:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     response = _client.messages.create(
@@ -95,7 +111,7 @@ def analyze_photo(image_bytes: bytes, media_type: str, section_type: str) -> dic
                     },
                     {
                         "type": "text",
-                        "text": f"Section du bâtiment inspectée : {section_label(section_type)}. Analyse cette photo.",
+                        "text": _build_analysis_prompt(section_type),
                     },
                 ],
             }

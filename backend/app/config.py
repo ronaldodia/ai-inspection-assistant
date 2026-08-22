@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7
     anthropic_api_key: str
+    voyage_api_key: str
     photos_dir: str = "/data/photos"
     reports_dir: str = "/data/reports"
     cors_origins: list[str] = ["http://localhost:3000"]

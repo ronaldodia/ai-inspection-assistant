@@ -5,6 +5,16 @@ import pytest
 import app.claude_client as claude_client
 
 
+@pytest.fixture(autouse=True)
+def _no_network_knowledge_context(monkeypatch):
+    # analyze_photo() pulls RAG context via app.knowledge.get_context_for_section
+    # (Voyage AI + Postgres) — out of scope for this DB-free/network-free suite
+    # (see tests/conftest.py). claude_client imports the function by name
+    # (`from app.knowledge import get_context_for_section`), so it must be patched
+    # where it's looked up (app.claude_client), not on app.knowledge itself.
+    monkeypatch.setattr(claude_client, "get_context_for_section", lambda section_type, k=4: "")
+
+
 class FakeBlock:
     def __init__(self, type_, text=None):
         self.type = type_
@@ -72,6 +82,30 @@ def test_analyze_photo_uses_french_section_label_in_prompt(monkeypatch):
 
     prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
     assert "Vide sanitaire" in prompt_text
+
+
+def test_analyze_photo_injects_knowledge_context_when_available(monkeypatch):
+    monkeypatch.setattr(
+        claude_client, "get_context_for_section", lambda section_type, k=4: "- extrait pertinent (Article 9.13)"
+    )
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "extrait pertinent (Article 9.13)" in prompt_text
+    assert "Ne cite jamais un article" in prompt_text
+
+
+def test_analyze_photo_omits_knowledge_block_when_no_context(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "Extraits pertinents" not in prompt_text
 
 
 def test_analyze_photo_raises_when_no_text_block(monkeypatch):

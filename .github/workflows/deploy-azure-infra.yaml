@@ -49,6 +49,7 @@ jobs:
               postgresAdminPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
               secretKey="${{ secrets.BACKEND_SECRET_KEY }}" \
               anthropicApiKey="${{ secrets.ANTHROPIC_API_KEY }}" \
+              voyageApiKey="${{ secrets.VOYAGE_API_KEY }}" \
               registryUsername="${{ secrets.GHCR_PULL_USERNAME }}" \
               registryPassword="${{ secrets.GHCR_PULL_TOKEN }}" \
               backendImage="ghcr.io/${{ github.repository }}-backend:${{ inputs.image_tag }}" \

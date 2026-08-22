@@ -2,7 +2,7 @@ name: Build & Push Docker Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths-ignore:
       - 'k8s/**'
       - 'INFRASTRUCTURE.md'
@@ -84,14 +84,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute backend tags
+        id: tags
+        run: |
+          set -euo pipefail
+          TAGS="${{ env.BACKEND_IMAGE }}:${{ steps.vars.outputs.tag }}"
+          # :latest est le défaut de infra/main.bicep (backendImage) pour un premier
+          # déploiement Azure — ne doit jamais être écrasé par un build dev, sinon
+          # un déploiement prod "à blanc" partirait sur du code non voulu.
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAGS="$TAGS
+          ${{ env.BACKEND_IMAGE }}:latest"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push backend/worker image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ env.BACKEND_IMAGE }}:${{ steps.vars.outputs.tag }}
-            ${{ env.BACKEND_IMAGE }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -127,7 +143,7 @@ jobs:
           context: ./frontend
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.inspect.evoluops.com' }}
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.inspectra.dev.evoluops.com' }}
           tags: ${{ env.FRONTEND_IMAGE }}:${{ steps.vars.outputs.tag }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
@@ -137,7 +153,10 @@ jobs:
   # besoin de sa propre image pour chaque cible. Ce job est ignoré tant que
   # vars.AZURE_RESOURCE_GROUP n'est pas configuré (voir infra/README.md).
   build-frontend-azure:
-    if: vars.AZURE_RESOURCE_GROUP != ''
+    # Azure App Service est l'environnement principal (déployé uniquement depuis
+    # main) — sans ce garde-fou, un push sur dev déclencherait aussi un déploiement
+    # en prod, alors que dev n'a que microk8s/ArgoCD comme cible.
+    if: github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -178,7 +197,7 @@ jobs:
 
   deploy-azure:
     needs: [build-backend, build-frontend-azure]
-    if: github.event_name == 'push' && vars.AZURE_RESOURCE_GROUP != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read

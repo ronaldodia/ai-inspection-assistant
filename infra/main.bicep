@@ -6,7 +6,7 @@
 //
 // Déploiement (dans un resource group existant) :
 //   az deployment group create -g <resource-group> -f infra/main.bicep \
-//     --parameters postgresAdminPassword=<...> secretKey=<...> anthropicApiKey=<...>
+//     --parameters postgresAdminPassword=<...> secretKey=<...> anthropicApiKey=<...> voyageApiKey=<...>
 
 @description('Préfixe utilisé pour nommer les ressources')
 param baseName string = 'inspect-ia'
@@ -26,6 +26,9 @@ param secretKey string
 
 @secure()
 param anthropicApiKey string
+
+@secure()
+param voyageApiKey string
 
 @description('Image backend/worker (même image, commande de démarrage différente pour le worker)')
 param backendImage string = 'ghcr.io/ronaldodia/ai-inspection-assistant-backend:latest'
@@ -53,6 +56,17 @@ var reportsContainerName = 'reports'
 var frontendUrl = 'https://${frontendAppName}.azurewebsites.net'
 var backendUrl = 'https://${backendAppName}.azurewebsites.net'
 var databaseUrl = 'postgresql://${postgresAdminLogin}:${postgresAdminPassword}@${postgresServerName}.postgres.database.azure.com:5432/${postgresDatabaseName}?sslmode=require'
+
+// Domaines personnalisés liés manuellement à frontendApp (hostNameBindings +
+// certificat managé) via CLI, en dehors de ce Bicep — voir infra/README.md. Le
+// host *.azurewebsites.net par défaut reste dans la liste car il répond toujours
+// (binding par défaut jamais retiré), même si le trafic public passe maintenant
+// par les domaines personnalisés. Ajouter ici tout nouveau domaine lié côté CLI.
+var corsOrigins = [
+  frontendUrl
+  'https://inspectra.evoluops.com'
+  'https://www.inspectra.evoluops.com'
+]
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
@@ -126,7 +140,7 @@ resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configura
   parent: postgres
   name: 'azure.extensions'
   properties: {
-    value: 'PGCRYPTO'
+    value: 'PGCRYPTO,VECTOR'
     source: 'user-override'
   }
 }
@@ -159,11 +173,12 @@ resource backendApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'DATABASE_URL', value: databaseUrl }
         { name: 'SECRET_KEY', value: secretKey }
         { name: 'ANTHROPIC_API_KEY', value: anthropicApiKey }
+        { name: 'VOYAGE_API_KEY', value: voyageApiKey }
         { name: 'STORAGE_BACKEND', value: 'azure' }
         { name: 'AZURE_STORAGE_CONNECTION_STRING', value: storageConnectionString }
         { name: 'AZURE_PHOTOS_CONTAINER', value: photosContainerName }
         { name: 'AZURE_REPORTS_CONTAINER', value: reportsContainerName }
-        { name: 'CORS_ORIGINS', value: '["${frontendUrl}"]' }
+        { name: 'CORS_ORIGINS', value: string(corsOrigins) }
       ])
     }
   }
@@ -187,6 +202,7 @@ resource workerApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'DATABASE_URL', value: databaseUrl }
         { name: 'SECRET_KEY', value: secretKey }
         { name: 'ANTHROPIC_API_KEY', value: anthropicApiKey }
+        { name: 'VOYAGE_API_KEY', value: voyageApiKey }
         { name: 'STORAGE_BACKEND', value: 'azure' }
         { name: 'AZURE_STORAGE_CONNECTION_STRING', value: storageConnectionString }
         { name: 'AZURE_PHOTOS_CONTAINER', value: photosContainerName }
