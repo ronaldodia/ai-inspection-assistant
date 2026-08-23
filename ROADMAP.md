@@ -22,6 +22,34 @@ Il complète la section "Nice to have" du readme sans la dupliquer.
 
 ---
 
+## TODO — Localisation précise par photo + dictée vocale
+
+*Non implémenté — noté à la demande de l'utilisateur (2026-08-22), à ne pas
+commencer avant la fonctionnalité de préremplissage par déclaration du vendeur
+ci-dessus dans l'ordre de développement.*
+
+Objectif : aller au-delà du système déjà capturé par photo (`section_type`, ex.
+"plomberie") pour ajouter une localisation fine (ex. "salle de bain principale",
+"sous-sol — mur nord") et permettre de la dicter, ou de dicter une courte
+description, plutôt que de tout saisir au clavier en terrain. Rejoint la
+recommandation de l'expert consulté sur la dictée vocale transcrite en français
+(voir discussion produit) — gain de vitesse, pas juste un gain de précision.
+
+**Piste de modèle de données (à valider au moment de l'implémentation)** :
+- Nouveau champ `photos.location_detail` (texte libre) — complète `section_type`
+  (le système) sans le remplacer, ni redéfinir la checklist déjà en place.
+
+**Prérequis techniques à trancher** :
+- Reconnaissance vocale : Web Speech API (navigateur, gratuit, qualité variable
+  en français québécois) vs service tiers (meilleure précision, coût et
+  dépendance réseau).
+- Doit rester compatible avec la capture hors-ligne existante
+  (`frontend/lib/offline-db.ts`) — la transcription ne peut pas dépendre d'un
+  aller-retour serveur synchrone pendant la capture si l'inspecteur est hors
+  ligne (vide sanitaire, zones rurales sans signal).
+
+---
+
 ## Phase 1 — Accès par invitation
 
 Objectif : passer de "un admin exécute une commande kubectl par inspecteur" à un

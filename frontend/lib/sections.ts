@@ -1,6 +1,15 @@
 export const SECTION_TYPES: [string, string][] = [
-  ['comble', 'Comble'],
+  ['exterieur', 'Extérieur'],
+  ['toiture', 'Toiture'],
+  ['structure', 'Structure'],
+  ['fondation', 'Fondation'],
   ['vide_sanitaire', 'Vide sanitaire'],
+  ['plomberie', 'Plomberie'],
+  ['electricite', 'Électricité'],
+  ['chauffage_ventilation', 'Chauffage et ventilation'],
+  ['isolation', 'Isolation'],
+  ['interieur', 'Intérieur'],
+  ['comble', 'Comble'],
   ['autre', 'Autre'],
 ]
 

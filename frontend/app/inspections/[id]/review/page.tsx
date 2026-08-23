@@ -5,29 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { sectionLabel } from '@/lib/sections'
-
-interface Anomaly {
-  type: string
-  severity: string
-  location: string
-  description: string
-  recommendation: string
-}
-
-interface Photo {
-  id: string
-  section_type: string
-  anomalies: Anomaly[] | null
-  overall_condition: string | null
-}
-
-interface InspectionDetail {
-  inspection: { id: string; address: string; status: string }
-  photos: Photo[]
-  report: { synthesis: string | null } | null
-}
-
-const SEVERITIES = ['mineure', 'majeure', 'critique']
+import { CHECKLIST_STATUSES, SEVERITIES } from '@/lib/inspectionOptions'
+import type { Anomaly, ChecklistItem, DisclosureItem, InspectionDetail, Photo } from '@/lib/types'
 
 export default function ReviewPage() {
   const token = useRequireAuth()
@@ -59,6 +38,19 @@ export default function ReviewPage() {
     )
   }
 
+  function updateChecklistItem(systemType: string, status: string, notes: string) {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            checklist: prev.checklist.map((c) =>
+              c.system_type === systemType ? { ...c, status, notes } : c
+            ),
+          }
+        : prev
+    )
+  }
+
   async function saveAll() {
     if (!data) return
     setSaving(true)
@@ -68,6 +60,12 @@ export default function ReviewPage() {
         await api.updateAnomaly(params.id, photo.id, {
           anomalies: photo.anomalies ?? [],
           overall_condition: photo.overall_condition ?? 'bon',
+        })
+      }
+      for (const item of data.checklist) {
+        await api.updateChecklistItem(params.id, item.system_type, {
+          status: item.status,
+          notes: item.notes,
         })
       }
       await api.updateSynthesis(params.id, synthesis)
@@ -101,6 +99,15 @@ export default function ReviewPage() {
       </header>
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
+        {data.checklist.length > 0 && (
+          <ChecklistPanel
+            checklist={data.checklist}
+            photos={data.photos}
+            disclosureItems={data.inspection.disclosure_items ?? []}
+            onChange={updateChecklistItem}
+          />
+        )}
+
         <section className="bg-white rounded-lg border border-stone-200 p-4">
           <label className="block text-sm font-medium text-stone-700 mb-2">Synthèse générale</label>
           <textarea
@@ -143,6 +150,81 @@ export default function ReviewPage() {
   )
 }
 
+// Statut suggéré (indicatif seulement, jamais imposé) à partir des anomalies déjà
+// détectées pour ce système, pour aider l'inspecteur à démarrer sans tout ressaisir.
+function suggestedStatus(systemType: string, photos: Photo[]): string | null {
+  const systemPhotos = photos.filter((p) => p.section_type === systemType)
+  if (systemPhotos.length === 0) return null
+  const anomalies = systemPhotos.flatMap((p) => p.anomalies ?? [])
+  if (anomalies.some((a) => a.severity === 'securite' || a.severity === 'majeur')) return 'deficient'
+  if (anomalies.length > 0) return 'a_surveiller'
+  return 'conforme'
+}
+
+function ChecklistPanel({
+  checklist,
+  photos,
+  disclosureItems,
+  onChange,
+}: {
+  checklist: ChecklistItem[]
+  photos: Photo[]
+  disclosureItems: DisclosureItem[]
+  onChange: (systemType: string, status: string, notes: string) => void
+}) {
+  return (
+    <section className="bg-white rounded-lg border border-stone-200 p-4">
+      <h2 className="text-sm font-medium text-stone-700 mb-3">État par système</h2>
+      <div className="space-y-2">
+        {checklist.map((item) => {
+          const suggestion = item.status === 'non_inspecte' ? suggestedStatus(item.system_type, photos) : null
+          const disclosures = disclosureItems.filter((d) => d.category === item.system_type)
+          return (
+            <div key={item.system_type} className="border-b border-stone-100 pb-2 last:border-0">
+              {disclosures.map((d, i) => (
+                <p key={i} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 mb-1">
+                  📋 Déclaration du vendeur : {d.description}
+                  {d.year ? ` (${d.year})` : ''}
+                </p>
+              ))}
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-sm text-stone-700">{sectionLabel(item.system_type)}</span>
+                {suggestion && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(item.system_type, suggestion, item.notes ?? '')}
+                    className="text-xs text-blue-600"
+                    title="Suggestion basée sur les anomalies détectées"
+                  >
+                    suggéré: {CHECKLIST_STATUSES.find(([v]) => v === suggestion)?.[1]}
+                  </button>
+                )}
+                <select
+                  value={item.status}
+                  onChange={(e) => onChange(item.system_type, e.target.value, item.notes ?? '')}
+                  className="rounded border border-stone-300 px-2 py-1 text-sm"
+                >
+                  {CHECKLIST_STATUSES.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                value={item.notes ?? ''}
+                onChange={(e) => onChange(item.system_type, item.status, e.target.value)}
+                placeholder="Note (optionnel)"
+                className="mt-1 w-full rounded border border-stone-200 px-2 py-1 text-xs"
+              />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function PhotoReviewCard({
   photo,
   onChange,
@@ -182,7 +264,7 @@ function PhotoReviewCard({
 
   function addAnomaly() {
     onChange(
-      [...anomalies, { type: 'autre', severity: 'mineure', location: '', description: '', recommendation: '' }],
+      [...anomalies, { type: 'autre', severity: 'observation', location: '', description: '', recommendation: '' }],
       condition
     )
   }
@@ -226,9 +308,9 @@ function PhotoReviewCard({
               onChange={(e) => updateAnomaly(i, 'severity', e.target.value)}
               className="rounded border border-stone-300 px-2 py-1 text-sm"
             >
-              {SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {SEVERITIES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>

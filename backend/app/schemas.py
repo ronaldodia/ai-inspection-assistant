@@ -11,12 +11,31 @@ class TokenResponse(BaseModel):
     token_type: str
 
 
+class DisclosureItem(BaseModel):
+    category: str
+    type: str
+    description: str
+    year: int | None = None
+
+
 class CreateInspectionRequest(BaseModel):
     address: str
     inspection_type: str = "general"
     notes: str | None = None
     lat: float | None = None
     lon: float | None = None
+    building_type: str | None = None
+    year_built: int | None = None
+    client_name: str | None = None
+    weather_conditions: str | None = None
+    temperature_celsius: int | None = None
+    humidity_percent: int | None = None
+    disclosure_items: list[DisclosureItem] | None = None
+
+
+class UpdateChecklistItemRequest(BaseModel):
+    status: str
+    notes: str | None = None
 
 
 class AnomalyItem(BaseModel):

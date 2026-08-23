@@ -53,7 +53,7 @@ def _valid_analysis_json():
             "anomalies": [
                 {
                     "type": "moisissure",
-                    "severity": "majeure",
+                    "severity": "majeur",
                     "location": "coin supérieur gauche",
                     "description": "desc",
                     "recommendation": "rec",
@@ -108,6 +108,29 @@ def test_analyze_photo_omits_knowledge_block_when_no_context(monkeypatch):
     assert "Extraits pertinents" not in prompt_text
 
 
+def test_analyze_photo_includes_building_context_in_prompt(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(
+        b"fake-bytes", "image/jpeg", "comble", building_type="maison_unifamiliale", year_built=1985
+    )
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "Maison unifamiliale" in prompt_text
+    assert "construit en 1985" in prompt_text
+
+
+def test_analyze_photo_omits_building_context_when_not_provided(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "Bâtiment :" not in prompt_text
+
+
 def test_analyze_photo_raises_when_no_text_block(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("other")]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
@@ -159,3 +182,81 @@ def test_synthesize_report_raises_when_no_text_block(monkeypatch):
 
     with pytest.raises(RuntimeError):
         claude_client.synthesize_report("123 rue Test", ["comble"], [])
+
+
+def _valid_disclosure_json(building_type="maison_unifamiliale"):
+    return json.dumps(
+        {
+            "address": "123 rue Test",
+            "building_type": building_type,
+            "year_built": 1985,
+            "disclosure_items": [
+                {
+                    "category": "fondation",
+                    "type": "vice_connu",
+                    "description": "Infiltration d'eau au sous-sol, réparée",
+                    "year": 2019,
+                }
+            ],
+        }
+    )
+
+
+def test_extract_disclosure_parses_valid_response(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_disclosure_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    result = claude_client.extract_disclosure(b"fake-pdf-bytes", "application/pdf")
+
+    assert result["address"] == "123 rue Test"
+    assert result["building_type"] == "maison_unifamiliale"
+    assert result["year_built"] == 1985
+    assert len(result["disclosure_items"]) == 1
+    assert result["disclosure_items"][0]["category"] == "fondation"
+
+
+def test_extract_disclosure_uses_document_block_for_pdf(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_disclosure_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.extract_disclosure(b"fake-pdf-bytes", "application/pdf")
+
+    content = fake_create.last_kwargs["messages"][0]["content"]
+    assert content[0]["type"] == "document"
+
+
+def test_extract_disclosure_uses_image_block_for_photo(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_disclosure_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.extract_disclosure(b"fake-image-bytes", "image/jpeg")
+
+    content = fake_create.last_kwargs["messages"][0]["content"]
+    assert content[0]["type"] == "image"
+
+
+def test_extract_disclosure_nulls_out_unrecognized_building_type(monkeypatch):
+    fake_create = FakeMessagesCreate(
+        FakeResponse([FakeBlock("text", _valid_disclosure_json(building_type="chalet"))])
+    )
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    result = claude_client.extract_disclosure(b"fake-pdf-bytes", "application/pdf")
+
+    assert result["building_type"] is None
+
+
+def test_extract_disclosure_raises_when_no_text_block(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("other")]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    with pytest.raises(RuntimeError):
+        claude_client.extract_disclosure(b"fake-pdf-bytes", "application/pdf")
+
+
+def test_extract_disclosure_raises_on_invalid_json(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", "not valid json")]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    with pytest.raises(RuntimeError):
+        claude_client.extract_disclosure(b"fake-pdf-bytes", "application/pdf")

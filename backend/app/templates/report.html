@@ -14,9 +14,11 @@
   .synthesis { white-space: pre-wrap; line-height: 1.5; }
   .finding { border: 1px solid #e7e5e4; border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; page-break-inside: avoid; }
   .finding .sev { font-size: 9pt; font-weight: 700; text-transform: uppercase; }
-  .sev-critique { color: #991b1b; }
-  .sev-majeure { color: #c2410c; }
-  .sev-mineure { color: #a16207; }
+  .sev-securite { color: #7f1d1d; }
+  .sev-majeur { color: #c2410c; }
+  .sev-mineur { color: #a16207; }
+  .sev-entretien { color: #475569; }
+  .sev-observation { color: #78716c; }
   .finding .type { font-weight: 600; margin: 2px 0 6px; }
   .finding p { margin: 4px 0; }
   .photo-block { margin-bottom: 1.2em; page-break-inside: avoid; }
@@ -25,13 +27,22 @@
   .notice { background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 6px; padding: 12px 16px; margin-bottom: 1.5em; font-size: 9.5pt; color: #44403c; line-height: 1.5; }
   .notice p { margin: 4px 0; }
   .priority-section { page-break-inside: avoid; }
-  .priority-item { border-left: 3px solid #991b1b; padding: 6px 12px; margin-bottom: 8px; }
-  .priority-item.majeure { border-left-color: #c2410c; }
+  .priority-item { border-left: 3px solid #7f1d1d; padding: 6px 12px; margin-bottom: 8px; }
+  .priority-item.majeur { border-left-color: #c2410c; }
   .priority-item .loc { font-size: 9pt; color: #78716c; }
   .rag-badge { display: inline-block; font-size: 9pt; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 3px 8px; margin-bottom: 8px; }
   .rag-green { background: #dcfce7; color: #166534; }
   .rag-amber { background: #fef3c7; color: #92400e; }
   .rag-red { background: #fee2e2; color: #991b1b; }
+  .rag-gray { background: #f3f4f6; color: #57534e; }
+  .context-grid { display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 9.5pt; color: #44403c; }
+  .context-grid div { min-width: 160px; }
+  .checklist-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 1em; }
+  .checklist-table th, .checklist-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e7e5e4; }
+  .checklist-table .status-badge { display: inline-block; font-size: 8.5pt; font-weight: 700; border-radius: 4px; padding: 2px 7px; }
+  .disclosure-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 1em; }
+  .disclosure-table th, .disclosure-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e7e5e4; vertical-align: top; }
+  .disclosure-table .type-tag { font-size: 8.5pt; color: #57534e; }
 </style>
 </head>
 <body>
@@ -42,6 +53,44 @@
     N° de rapport : {{ report_number }}<br>
     Inspecteur : {{ inspector.full_name }}{% if inspector.certification %} — Certification : {{ inspector.certification }}{% endif %}
   </div>
+
+  <div class="context-grid notice">
+    <div><strong>Mandat :</strong> {{ mandate_type_display or 'Non précisé' }}</div>
+    <div><strong>Type de bâtiment :</strong> {{ building_type_display or 'Non précisé' }}</div>
+    {% if inspection.year_built %}<div><strong>Année de construction :</strong> {{ inspection.year_built }}</div>{% endif %}
+    {% if inspection.client_name %}<div><strong>Client :</strong> {{ inspection.client_name }}</div>{% endif %}
+    {% if inspection.weather_conditions %}<div><strong>Météo :</strong> {{ inspection.weather_conditions }}</div>{% endif %}
+    {% if inspection.temperature_celsius is not none %}<div><strong>Température :</strong> {{ inspection.temperature_celsius }} °C</div>{% endif %}
+    {% if inspection.humidity_percent is not none %}<div><strong>Humidité :</strong> {{ inspection.humidity_percent }} %</div>{% endif %}
+  </div>
+
+  {% if disclosure_items %}
+  <h2>Déclarations du vendeur</h2>
+  <table class="disclosure-table">
+    <tr><th>Système</th><th>Type</th><th>Détail</th></tr>
+    {% for item in disclosure_items %}
+    <tr>
+      <td>{{ item.category_label }}</td>
+      <td class="type-tag">{{ item.type_label }}</td>
+      <td>{{ item.description }}{% if item.year %} ({{ item.year }}){% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% if checklist %}
+  <h2>État par système</h2>
+  <table class="checklist-table">
+    <tr><th>Système</th><th>Statut</th><th>Notes</th></tr>
+    {% for item in checklist %}
+    <tr>
+      <td>{{ item.system_label }}</td>
+      <td><span class="status-badge rag-{{ item.color }}">{{ item.status_label }}</span></td>
+      <td>{{ item.notes or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
 
   {% if priority_items %}
   <h2>Points prioritaires à retenir ({{ priority_items|length }})</h2>
@@ -58,9 +107,9 @@
   {% endif %}
 
   <div class="counts">
-    <div class="count"><span class="n" style="color:#991b1b">{{ counts.critique }}</span>Critique</div>
-    <div class="count"><span class="n" style="color:#c2410c">{{ counts.majeure }}</span>Majeure</div>
-    <div class="count"><span class="n" style="color:#a16207">{{ counts.mineure }}</span>Mineure</div>
+    {% for key, label in severity_labels.items() %}
+    <div class="count"><span class="n sev-{{ key }}">{{ counts.get(key, 0) }}</span>{{ label }}</div>
+    {% endfor %}
   </div>
 
   <h2>Synthèse</h2>

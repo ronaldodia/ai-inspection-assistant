@@ -4,3 +4,5 @@ __pycache__/
 k8s/01-secrets.yaml
 k8s/imagepullsecrets.yaml
 backend/.venv
+frontend/.next/
+frontend/tsconfig.tsbuildinfo

@@ -29,7 +29,7 @@ def claim_next_inspection(conn: psycopg.Connection) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, address
+            SELECT id, address, building_type, year_built
             FROM inspections
             WHERE status = 'QUEUED'
             ORDER BY created_at
@@ -71,7 +71,13 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
             raise RuntimeError(f"Photo introuvable dans le stockage: {photo['storage_path']}")
 
         section_types.append(photo["section_type"])
-        result = analyze_photo(image_bytes, media_type, photo["section_type"])
+        result = analyze_photo(
+            image_bytes,
+            media_type,
+            photo["section_type"],
+            inspection.get("building_type"),
+            inspection.get("year_built"),
+        )
         usage = result.pop("_usage")
         all_anomalies.extend(result["anomalies"])
 

@@ -40,6 +40,9 @@ export const api = {
   createInspection: (data: Record<string, unknown>) =>
     request('/api/inspections', { method: 'POST', body: JSON.stringify(data) }).then((r) => r.json()),
 
+  extractDisclosure: (formData: FormData) =>
+    request('/api/inspections/extract-disclosure', { method: 'POST', body: formData }).then((r) => r.json()),
+
   listInspections: () => request('/api/inspections').then((r) => r.json()),
 
   getInspection: (id: string) => request(`/api/inspections/${id}`).then((r) => r.json()),
@@ -54,6 +57,12 @@ export const api = {
 
   updateAnomaly: (inspectionId: string, photoId: string, data: Record<string, unknown>) =>
     request(`/api/inspections/${inspectionId}/photos/${photoId}/anomalies`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }).then((r) => r.json()),
+
+  updateChecklistItem: (inspectionId: string, systemType: string, data: Record<string, unknown>) =>
+    request(`/api/inspections/${inspectionId}/checklist/${systemType}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }).then((r) => r.json()),

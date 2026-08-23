@@ -7,20 +7,42 @@ from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageOps
 from weasyprint import HTML
 
-from app.constants import section_label
+from app.constants import building_type_label, checklist_status_label, mandate_type_label, section_label
 from app.storage import storage
 
 _env = Environment(
     loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), "templates"))
 )
 
-SEVERITY_LABELS = {"mineure": "Mineure", "majeure": "Majeure", "critique": "Critique"}
+SEVERITY_LABELS = {
+    "securite": "Sécurité",
+    "majeur": "Majeur",
+    "mineur": "Mineur",
+    "entretien": "Entretien",
+    "observation": "Observation",
+}
 
 RAG_MAP = {
     "bon": {"level": "green", "label": "Adéquat"},
     "acceptable": {"level": "amber", "label": "Avertissement"},
     "mauvais": {"level": "red", "label": "Prioritaire"},
     "critique": {"level": "red", "label": "Prioritaire"},
+}
+
+CHECKLIST_STATUS_COLOR = {
+    "conforme": "green",
+    "a_surveiller": "amber",
+    "deficient": "red",
+    "sans_objet": "gray",
+    "non_inspecte": "gray",
+}
+
+DISCLOSURE_TYPE_LABELS = {
+    "vice_connu": "Vice connu",
+    "renovation": "Rénovation",
+    "systeme_present": "Système présent",
+    "garantie": "Garantie",
+    "observation": "Observation",
 }
 
 MAX_IMAGE_WIDTH = 1000
@@ -48,12 +70,12 @@ def build_report_context(photos: list[dict]) -> dict:
     No file or network I/O — kept separate from generate_report_pdf so the
     grouping/counting/priority-sorting logic can be unit-tested without WeasyPrint.
     """
-    counts = {"critique": 0, "majeure": 0, "mineure": 0}
+    counts = {"securite": 0, "majeur": 0, "mineur": 0, "entretien": 0, "observation": 0}
     sections: dict[str, dict] = {}
     for photo in photos:
         anomalies = photo["anomalies"] or []
         for anomaly in anomalies:
-            severity = anomaly.get("severity", "mineure")
+            severity = anomaly.get("severity", "mineur")
             counts[severity] = counts.get(severity, 0) + 1
 
         section_type = photo.get("section_type") or "autre"
@@ -77,9 +99,9 @@ def build_report_context(photos: list[dict]) -> dict:
         for section in sections.values()
         for photo in section["photos"]
         for anomaly in photo["anomalies"]
-        if anomaly.get("severity") in ("critique", "majeure")
+        if anomaly.get("severity") in ("securite", "majeur")
     ]
-    priority_items.sort(key=lambda a: a["severity"] != "critique")
+    priority_items.sort(key=lambda a: a["severity"] != "securite")
 
     return {
         "sections": sections.values(),
@@ -89,14 +111,48 @@ def build_report_context(photos: list[dict]) -> dict:
     }
 
 
+def _build_checklist_context(checklist: list[dict]) -> list[dict]:
+    return [
+        {
+            "system_label": section_label(item["system_type"]),
+            "status": item["status"],
+            "status_label": checklist_status_label(item["status"]),
+            "color": CHECKLIST_STATUS_COLOR.get(item["status"], "gray"),
+            "notes": item.get("notes"),
+        }
+        for item in checklist
+    ]
+
+
+def _build_disclosure_context(disclosure_items: list[dict]) -> list[dict]:
+    return [
+        {
+            "category_label": section_label(item["category"]),
+            "type_label": DISCLOSURE_TYPE_LABELS.get(item["type"], item["type"]),
+            "description": item["description"],
+            "year": item.get("year"),
+        }
+        for item in disclosure_items
+    ]
+
+
 def generate_report_pdf(
-    inspection: dict, photos: list[dict], synthesis: str, report_number: str, inspector: dict
+    inspection: dict,
+    photos: list[dict],
+    checklist: list[dict],
+    synthesis: str,
+    report_number: str,
+    inspector: dict,
 ) -> str:
     template = _env.get_template("report.html")
     context = build_report_context(photos)
 
     html_content = template.render(
         inspection=inspection,
+        building_type_display=building_type_label(inspection.get("building_type")),
+        mandate_type_display=mandate_type_label(inspection.get("inspection_type")),
+        checklist=_build_checklist_context(checklist),
+        disclosure_items=_build_disclosure_context(inspection.get("disclosure_items") or []),
         synthesis=synthesis or "",
         severity_labels=SEVERITY_LABELS,
         report_number=report_number,
