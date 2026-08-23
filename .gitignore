@@ -6,3 +6,4 @@ k8s/imagepullsecrets.yaml
 backend/.venv
 frontend/.next/
 frontend/tsconfig.tsbuildinfo
+frontend/public/sw.js
