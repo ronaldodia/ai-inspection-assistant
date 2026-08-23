@@ -22,31 +22,55 @@ Il complète la section "Nice to have" du readme sans la dupliquer.
 
 ---
 
-## TODO — Localisation précise par photo + dictée vocale
+## Localisation précise par photo (2026-08-23)
 
-*Non implémenté — noté à la demande de l'utilisateur (2026-08-22), à ne pas
-commencer avant la fonctionnalité de préremplissage par déclaration du vendeur
-ci-dessus dans l'ordre de développement.*
+Fonctionnalité scindée en deux (décision utilisateur) :
 
-Objectif : aller au-delà du système déjà capturé par photo (`section_type`, ex.
-"plomberie") pour ajouter une localisation fine (ex. "salle de bain principale",
-"sous-sol — mur nord") et permettre de la dicter, ou de dicter une courte
-description, plutôt que de tout saisir au clavier en terrain. Rejoint la
-recommandation de l'expert consulté sur la dictée vocale transcrite en français
-(voir discussion produit) — gain de vitesse, pas juste un gain de précision.
+**Partie 1 — texte libre, en cours d'implémentation.** `photos.location_detail`
+(texte libre, ex. "salle de bain principale"), saisi comme réglage actif
+persistant à côté de "Section en cours" dans l'écran de capture (même modèle
+mental, pas un nouveau concept à apprendre), avec autocomplétion `<datalist>`
+alimentée par les localisations déjà tapées dans l'inspection en cours.
+Transmis à `analyze_photo()` pour aider Claude à se situer dans le bâtiment.
 
-**Piste de modèle de données (à valider au moment de l'implémentation)** :
-- Nouveau champ `photos.location_detail` (texte libre) — complète `section_type`
-  (le système) sans le remplacer, ni redéfinir la checklist déjà en place.
-
-**Prérequis techniques à trancher** :
-- Reconnaissance vocale : Web Speech API (navigateur, gratuit, qualité variable
-  en français québécois) vs service tiers (meilleure précision, coût et
-  dépendance réseau).
-- Doit rester compatible avec la capture hors-ligne existante
+**Partie 2 — dictée vocale, non commencée.** Permettre de dicter la
+localisation (ou une courte description) plutôt que de taper. Rejoint la
+recommandation de l'expert consulté sur la dictée transcrite en français (voir
+discussion produit). Prérequis à trancher :
+- Web Speech API (navigateur, gratuit, qualité variable en français québécois)
+  vs service tiers (meilleure précision, coût et dépendance réseau).
+- Doit rester compatible avec la capture hors-ligne
   (`frontend/lib/offline-db.ts`) — la transcription ne peut pas dépendre d'un
-  aller-retour serveur synchrone pendant la capture si l'inspecteur est hors
-  ligne (vide sanitaire, zones rurales sans signal).
+  aller-retour serveur synchrone si l'inspecteur est hors ligne (vide
+  sanitaire, zones rurales sans signal).
+
+## TODO — Localisations dérivées de l'annonce/déclaration (idée, 2026-08-23)
+
+Idée de l'utilisateur, pas encore évaluée en profondeur : au lieu de partir
+d'une liste de localisations vide et construite au fil de la saisie (Partie 1
+ci-dessus), extraire la liste des pièces directement de l'annonce immobilière
+et/ou de la déclaration du vendeur (nombre de chambres, salles de bain, etc.)
+pour préremplir les localisations disponibles avant même le début de la
+capture — l'inspecteur n'aurait plus qu'à taper, dans la plupart des cas.
+
+**Nuance à trancher avant de partir dessus** : la déclaration du vendeur (déjà
+extraite via `POST /api/inspections/extract-disclosure`,
+`DISCLOSURE_SCHEMA` dans `backend/app/claude_client.py`) est structurée autour
+des vices/rénovations/systèmes, pas d'un plan pièce par pièce — le document le
+plus susceptible de contenir un décompte de pièces est plutôt **l'annonce de
+vente** (Centris, DuProprio, Realtor.ca...), un document distinct qui n'a pas
+d'upload/extraction dédiée aujourd'hui. Une éventuelle implémentation devrait
+donc soit ajouter un nouveau type de document à extraire, soit assouplir
+l'extraction existante pour accepter les deux sources.
+
+**Doit rester une amélioration au-dessus de la Partie 1, pas un remplacement**
+— aucune annonce/déclaration n'est disponible pour tous les mandats (ex.
+expertise, pré-réception), le champ texte libre + autocomplétion doit
+continuer à fonctionner seul dans ce cas.
+
+Piste secondaire intéressante si implémenté : un indicateur de couverture
+("pièces déclarées mais jamais photographiées"), sur le même principe que la
+checklist par système déjà en place.
 
 ---
 

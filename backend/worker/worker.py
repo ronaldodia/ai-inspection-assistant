@@ -52,7 +52,8 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, storage_path, section_type FROM photos WHERE inspection_id = %s ORDER BY photo_order",
+            "SELECT id, storage_path, section_type, location_detail FROM photos "
+            "WHERE inspection_id = %s ORDER BY photo_order",
             (inspection_id,),
         )
         photos = cur.fetchall()
@@ -83,6 +84,7 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
             inspection.get("has_basement"),
             inspection.get("has_crawlspace"),
             inspection.get("has_attic"),
+            photo["location_detail"],
         )
         usage = result.pop("_usage")
         all_anomalies.extend(result["anomalies"])

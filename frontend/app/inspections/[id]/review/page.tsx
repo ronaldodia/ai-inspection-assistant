@@ -375,6 +375,11 @@ function PhotoReviewCard({
           <span className="inline-block text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 rounded px-1.5 py-0.5 mb-2">
             {sectionLabel(photo.section_type)}
           </span>
+          {photo.location_detail && (
+            <span className="inline-block text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 mb-2 ml-1">
+              {photo.location_detail}
+            </span>
+          )}
           <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
           <select
             value={condition}

@@ -9,6 +9,7 @@ export interface Anomaly {
 export interface Photo {
   id: string
   section_type: string
+  location_detail: string | null
   anomalies: Anomaly[] | null
   overall_condition: string | null
 }

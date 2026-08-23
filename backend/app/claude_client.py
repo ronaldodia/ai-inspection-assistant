@@ -196,6 +196,7 @@ def _build_analysis_prompt(
     has_basement: str | None = None,
     has_crawlspace: str | None = None,
     has_attic: str | None = None,
+    location_detail: str | None = None,
 ) -> str:
     prompt = f"Section du bâtiment inspectée : {section_label(section_type)}."
 
@@ -218,6 +219,9 @@ def _build_analysis_prompt(
         building_bits.append("comble présent")
     if building_bits:
         prompt += f" Bâtiment : {', '.join(building_bits)}."
+
+    if location_detail:
+        prompt += f" Localisation précise dans le bâtiment : {location_detail}."
 
     prompt += " Analyse cette photo."
 
@@ -244,6 +248,7 @@ def analyze_photo(
     has_basement: str | None = None,
     has_crawlspace: str | None = None,
     has_attic: str | None = None,
+    location_detail: str | None = None,
 ) -> dict:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     response = _client.messages.create(
@@ -276,6 +281,7 @@ def analyze_photo(
                             has_basement,
                             has_crawlspace,
                             has_attic,
+                            location_detail,
                         ),
                     },
                 ],

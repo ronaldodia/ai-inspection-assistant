@@ -98,6 +98,7 @@ def build_report_context(photos: list[dict]) -> dict:
                 "image": _photo_data_uri(photo["storage_path"]),
                 "anomalies": anomalies,
                 "rag": RAG_MAP.get(photo.get("overall_condition")),
+                "location_detail": photo.get("location_detail"),
             }
         )
 

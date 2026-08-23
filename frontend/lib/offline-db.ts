@@ -6,6 +6,7 @@ export interface PendingPhoto {
   blob: Blob
   photoOrder: number
   sectionType: string
+  locationDetail?: string
   lat: number | null
   lon: number | null
   takenAt: string

@@ -143,7 +143,7 @@ def get_inspection(
     inspection = get_owned_inspection(conn, inspection_id, user["id"])
     photos = conn.execute(
         """
-        SELECT p.id, p.photo_order, p.section_type, p.lat, p.lon, p.taken_at,
+        SELECT p.id, p.photo_order, p.section_type, p.location_detail, p.lat, p.lon, p.taken_at,
                a.anomalies, a.overall_condition, a.reviewed
         FROM photos p
         LEFT JOIN anomaly_detections a ON a.photo_id = p.id
@@ -186,6 +186,7 @@ def upload_photo(
     client_photo_id: str = Form(...),
     photo_order: int = Form(...),
     section_type: str = Form("autre"),
+    location_detail: str | None = Form(None),
     lat: float | None = Form(None),
     lon: float | None = Form(None),
     taken_at: str | None = Form(None),
@@ -224,11 +225,23 @@ def upload_photo(
     row = conn.execute(
         """
         INSERT INTO photos
-            (id, inspection_id, client_photo_id, storage_path, section_type, photo_order, lat, lon, taken_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (id, inspection_id, client_photo_id, storage_path, section_type, location_detail,
+             photo_order, lat, lon, taken_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
         """,
-        (photo_id, inspection_id, client_photo_id, rel_path, section_type, photo_order, lat, lon, taken_at),
+        (
+            photo_id,
+            inspection_id,
+            client_photo_id,
+            rel_path,
+            section_type,
+            location_detail,
+            photo_order,
+            lat,
+            lon,
+            taken_at,
+        ),
     ).fetchone()
     conn.commit()
     return {"id": str(row["id"]), "duplicate": False}
@@ -395,7 +408,8 @@ def finalize_inspection(
 
     photos = conn.execute(
         """
-        SELECT p.id, p.photo_order, p.section_type, p.storage_path, a.anomalies, a.overall_condition
+        SELECT p.id, p.photo_order, p.section_type, p.location_detail, p.storage_path,
+               a.anomalies, a.overall_condition
         FROM photos p
         JOIN anomaly_detections a ON a.photo_id = p.id
         WHERE p.inspection_id = %s

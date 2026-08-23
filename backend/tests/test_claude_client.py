@@ -154,6 +154,28 @@ def test_analyze_photo_includes_extended_aibq_context_fields(monkeypatch):
     assert "comble présent" in prompt_text
 
 
+def test_analyze_photo_includes_location_detail_in_prompt(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(
+        b"fake-bytes", "image/jpeg", "interieur", location_detail="Salle de bain principale"
+    )
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "Localisation précise dans le bâtiment : Salle de bain principale." in prompt_text
+
+
+def test_analyze_photo_omits_location_detail_when_not_provided(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "interieur")
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "Localisation précise" not in prompt_text
+
+
 def test_analyze_photo_raises_when_no_text_block(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("other")]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)

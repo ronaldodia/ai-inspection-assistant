@@ -24,6 +24,7 @@ export default function CapturePage() {
 
   const [photos, setPhotos] = useState<PendingPhoto[]>([])
   const [section, setSection] = useState(SECTION_TYPES[0][0])
+  const [location, setLocation] = useState('')
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [syncing, setSyncing] = useState(false)
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -80,6 +81,7 @@ export default function CapturePage() {
         formData.append('client_photo_id', p.clientPhotoId)
         formData.append('photo_order', String(p.photoOrder))
         formData.append('section_type', p.sectionType)
+        if (p.locationDetail) formData.append('location_detail', p.locationDetail)
         if (p.lat != null) formData.append('lat', String(p.lat))
         if (p.lon != null) formData.append('lon', String(p.lon))
         if (p.takenAt) formData.append('taken_at', p.takenAt)
@@ -139,6 +141,7 @@ export default function CapturePage() {
           blob,
           photoOrder: startOrder + index,
           sectionType: section,
+          locationDetail: location || undefined,
           lat: exif.lat,
           lon: exif.lon,
           takenAt: exif.takenAt ?? new Date().toISOString(),
@@ -288,6 +291,29 @@ export default function CapturePage() {
           </p>
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-2">
+            Localisation actuelle (optionnel)
+          </label>
+          <input
+            list="location-suggestions"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="ex. Salle de bain principale"
+            className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+          />
+          <datalist id="location-suggestions">
+            {Array.from(new Set(photos.map((p) => p.locationDetail).filter((v): v is string => !!v))).map(
+              (loc) => (
+                <option key={loc} value={loc} />
+              )
+            )}
+          </datalist>
+          <p className="text-xs text-stone-500 mt-1">
+            Aide l&apos;IA à savoir où elle regarde dans le bâtiment — un mot ou deux suffisent.
+          </p>
+        </div>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -324,6 +350,11 @@ export default function CapturePage() {
               <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
                 {sectionLabel(p.sectionType)}
               </span>
+              {p.locationDetail && (
+                <span className="absolute bottom-1 right-1 bg-blue-600/80 text-white text-[10px] px-1.5 py-0.5 rounded max-w-[70%] truncate">
+                  {p.locationDetail}
+                </span>
+              )}
               {!p.uploaded && (
                 <span className="absolute top-1 left-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded">
                   En attente

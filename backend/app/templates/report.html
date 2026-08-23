@@ -148,6 +148,7 @@
   <div class="photo-block">
     {% if photo.image %}<img src="{{ photo.image }}" alt="">{% endif %}
     {% if photo.rag %}<span class="rag-badge rag-{{ photo.rag.level }}">{{ photo.rag.label }}</span>{% endif %}
+    {% if photo.location_detail %}<p class="loc">{{ photo.location_detail }}</p>{% endif %}
     {% for f in photo.anomalies %}
     <div class="finding">
       <div class="sev sev-{{ f.severity }}">{{ severity_labels.get(f.severity, f.severity) }}</div>
