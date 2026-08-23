@@ -52,6 +52,9 @@ export const api = {
       r.json()
     ),
 
+  deletePhoto: (inspectionId: string, photoId: string) =>
+    request(`/api/inspections/${inspectionId}/photos/${photoId}`, { method: 'DELETE' }).then((r) => r.json()),
+
   queueInspection: (id: string) =>
     request(`/api/inspections/${id}/queue`, { method: 'POST' }).then((r) => r.json()),
 

@@ -17,6 +17,9 @@ class Storage(ABC):
     @abstractmethod
     def read(self, container: str, path: str) -> bytes | None: ...
 
+    @abstractmethod
+    def delete(self, container: str, path: str) -> None: ...
+
 
 class LocalStorage(Storage):
     _DIR_SETTING = {"photos": "photos_dir", "reports": "reports_dir"}
@@ -36,6 +39,11 @@ class LocalStorage(Storage):
             return None
         with open(abs_path, "rb") as f:
             return f.read()
+
+    def delete(self, container: str, path: str) -> None:
+        abs_path = os.path.join(self._base_dir(container), path)
+        if os.path.isfile(abs_path):
+            os.remove(abs_path)
 
 
 class AzureBlobStorage(Storage):
@@ -63,6 +71,15 @@ class AzureBlobStorage(Storage):
             return blob.download_blob().readall()
         except ResourceNotFoundError:
             return None
+
+    def delete(self, container: str, path: str) -> None:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        blob = self._client.get_blob_client(container=self._container_name(container), blob=path)
+        try:
+            blob.delete_blob()
+        except ResourceNotFoundError:
+            pass
 
 
 def get_storage() -> Storage:

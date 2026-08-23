@@ -83,8 +83,8 @@ export default function CapturePage() {
         if (p.lon != null) formData.append('lon', String(p.lon))
         if (p.takenAt) formData.append('taken_at', p.takenAt)
         try {
-          await api.uploadPhoto(inspectionId, formData)
-          await markUploaded(p.clientPhotoId)
+          const result = await api.uploadPhoto(inspectionId, formData)
+          await markUploaded(p.clientPhotoId, result.id)
         } catch (err) {
           // Isolée par photo : un échec (ex. limite atteinte) ne doit pas
           // empêcher les autres photos en attente d'être tentées.
@@ -160,14 +160,23 @@ export default function CapturePage() {
   }
 
   async function handleRemove(clientPhotoId: string) {
+    const photo = photos.find((p) => p.clientPhotoId === clientPhotoId)
+    if (photo?.uploaded && photo.serverId) {
+      // Déjà synchronisée : la retirer côté serveur d'abord (fichier +
+      // ligne en base) — sinon elle reste comptée et analysée par l'IA
+      // même après avoir disparu de cet écran.
+      try {
+        await api.deletePhoto(inspectionId, photo.serverId)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erreur lors de la suppression de la photo')
+        return
+      }
+    }
     await deletePhoto(clientPhotoId)
     await refreshPhotos()
   }
 
-  // Combien de photos en attente dépassent la capacité restante côté serveur —
-  // seules les photos jamais synchronisées peuvent être retirées (une fois
-  // uploadée, une photo fait partie de l'inspection, il n'y a pas d'API pour
-  // la retirer côté serveur).
+  // Combien de photos en attente dépassent la capacité restante côté serveur.
   const uploadedCount = photos.filter((p) => p.uploaded).length
   const pendingCount = photos.filter((p) => !p.uploaded).length
   const remainingCapacity = photoLimit != null ? Math.max(0, photoLimit - uploadedCount) : Infinity
@@ -246,13 +255,13 @@ export default function CapturePage() {
 
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-2">Section en cours</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {SECTION_TYPES.map(([value, label]) => (
               <button
                 type="button"
                 key={value}
                 onClick={() => setSection(value)}
-                className={`flex-1 rounded border px-3 py-2 text-sm ${
+                className={`rounded border px-2 py-2 text-xs ${
                   section === value
                     ? 'border-blue-600 bg-blue-50 text-blue-700'
                     : 'border-stone-300 text-stone-600'

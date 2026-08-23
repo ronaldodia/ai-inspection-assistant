@@ -10,6 +10,7 @@ export interface PendingPhoto {
   lon: number | null
   takenAt: string
   uploaded: boolean
+  serverId?: string
 }
 
 interface InspectDB extends DBSchema {
@@ -44,11 +45,12 @@ export async function getAllPhotosForInspection(inspectionId: string) {
   return db.getAllFromIndex('photos', 'by-inspection', inspectionId)
 }
 
-export async function markUploaded(clientPhotoId: string) {
+export async function markUploaded(clientPhotoId: string, serverId: string) {
   const db = await getDb()
   const photo = await db.get('photos', clientPhotoId)
   if (photo) {
     photo.uploaded = true
+    photo.serverId = serverId
     await db.put('photos', photo)
   }
 }

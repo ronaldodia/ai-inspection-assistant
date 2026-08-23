@@ -205,6 +205,33 @@ def upload_photo(
     return {"id": str(row["id"]), "duplicate": False}
 
 
+@router.delete("/{inspection_id}/photos/{photo_id}")
+def delete_photo(
+    inspection_id: str,
+    photo_id: str,
+    user=Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    inspection = get_owned_inspection(conn, inspection_id, user["id"])
+    if inspection["status"] not in ("DRAFT", "ERROR"):
+        raise HTTPException(status_code=400, detail="Impossible de retirer une photo à cette étape")
+
+    row = conn.execute(
+        "DELETE FROM photos WHERE id = %s AND inspection_id = %s RETURNING storage_path",
+        (photo_id, inspection_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Photo introuvable pour cette inspection")
+    conn.commit()
+
+    # Le fichier n'est retiré qu'une fois la ligne effectivement supprimée — dans
+    # l'autre ordre, un crash entre les deux laisserait une ligne pointant vers
+    # un fichier disparu, alors que l'inverse (fichier orphelin sans ligne) est
+    # sans conséquence, juste du stockage à rattraper plus tard.
+    storage.delete("photos", row["storage_path"])
+    return {"ok": True}
+
+
 @router.post("/{inspection_id}/queue")
 def queue_inspection(
     inspection_id: str,

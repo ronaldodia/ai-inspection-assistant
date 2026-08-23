@@ -27,6 +27,23 @@ def test_local_storage_write_creates_nested_directories(tmp_path, monkeypatch):
     assert (tmp_path / "reports" / "nested" / "dir" / "report.pdf").read_bytes() == b"%PDF-fake"
 
 
+def test_local_storage_delete_removes_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path / "photos"))
+    store = LocalStorage()
+    store.write("photos", "abc/photo.jpg", b"fake-image-bytes")
+
+    store.delete("photos", "abc/photo.jpg")
+
+    assert store.read("photos", "abc/photo.jpg") is None
+
+
+def test_local_storage_delete_missing_file_is_a_noop(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path / "photos"))
+    store = LocalStorage()
+
+    store.delete("photos", "does-not-exist.jpg")  # ne doit pas lever d'exception
+
+
 def test_get_storage_returns_local_storage_by_default(monkeypatch):
     monkeypatch.setattr(settings, "storage_backend", "local")
     assert isinstance(get_storage(), LocalStorage)
