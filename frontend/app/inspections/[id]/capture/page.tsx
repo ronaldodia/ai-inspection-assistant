@@ -234,6 +234,15 @@ export default function CapturePage() {
       </header>
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
+        {!online && (
+          <div className="rounded-lg border border-stone-300 bg-stone-100 p-3 text-sm text-stone-700">
+            📴 Hors ligne — vous pouvez continuer à ajouter des photos normalement,
+            mais évitez de rafraîchir la page ou d&apos;utiliser le bouton
+            « précédent » du navigateur : cette page précise ne peut se recharger
+            que si elle a déjà été visitée en ligne.
+          </div>
+        )}
+
         <p className="text-sm text-stone-600">
           {photos.length} photo{photos.length !== 1 ? 's' : ''}
           {photoLimit != null && ` / ${photoLimit}`} capturée{photos.length !== 1 ? 's' : ''}
