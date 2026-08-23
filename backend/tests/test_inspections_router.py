@@ -1,19 +1,15 @@
-import sys
-import types
-
 import pytest
 from fastapi import HTTPException
 
 # app.routers.inspections imports app.pdf, which imports weasyprint at module
-# level — weasyprint needs native GTK libs not installed on this machine (same
-# pre-existing, unrelated gap as tests/test_pdf.py). Stub it so this file's
-# import chain doesn't require WeasyPrint to actually render anything.
-if "weasyprint" not in sys.modules:
-    _fake_weasyprint = types.ModuleType("weasyprint")
-    _fake_weasyprint.HTML = object
-    sys.modules["weasyprint"] = _fake_weasyprint
-
-import app.routers.inspections as inspections_router  # noqa: E402
+# level — requires WeasyPrint's native GTK libs to be installed (present on
+# CI via apt-get, not on every local dev machine — same pre-existing,
+# unrelated gap as tests/test_pdf.py, which has the same requirement). Do not
+# stub sys.modules["weasyprint"] here: it's a process-wide mutation that would
+# leak into every other test module collected in the same pytest run
+# (including test_pdf.py, which needs the real WeasyPrint.HTML) since Python
+# caches imports globally, not per test file.
+import app.routers.inspections as inspections_router
 
 
 class _FakeFile:
