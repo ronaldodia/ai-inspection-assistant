@@ -35,6 +35,13 @@ data:
         notes TEXT,
         lat DECIMAL(10, 8),
         lon DECIMAL(11, 8),
+        building_type VARCHAR(50),
+        year_built INT,
+        client_name VARCHAR(255),
+        weather_conditions VARCHAR(50),
+        temperature_celsius INT,
+        humidity_percent INT,
+        disclosure_items JSONB NOT NULL DEFAULT '[]',
         status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
         error_message TEXT,
         archived_at TIMESTAMPTZ,
@@ -79,6 +86,16 @@ data:
         generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE inspection_checklist_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        inspection_id UUID NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+        system_type VARCHAR(50) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'non_inspecte',
+        notes TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (inspection_id, system_type)
+    );
+
     CREATE TABLE knowledge_documents (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         title VARCHAR(255) NOT NULL UNIQUE,
@@ -103,6 +120,8 @@ data:
     CREATE INDEX idx_anomaly_detections_gin ON anomaly_detections USING GIN (anomalies);
     CREATE INDEX idx_knowledge_chunks_document_id ON knowledge_chunks(document_id);
     CREATE INDEX idx_knowledge_chunks_embedding ON knowledge_chunks USING hnsw (embedding vector_cosine_ops);
+    CREATE INDEX idx_inspection_checklist_items_inspection_id ON inspection_checklist_items(inspection_id);
+    CREATE INDEX idx_inspections_disclosure_items_gin ON inspections USING GIN (disclosure_items);
 kind: ConfigMap
 metadata:
   name: postgres-init
