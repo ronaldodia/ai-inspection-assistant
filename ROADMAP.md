@@ -22,6 +22,87 @@ Il complète la section "Nice to have" du readme sans la dupliquer.
 
 ---
 
+## TODO — Sécurité, pentest, tests d'intégration et fonctionnels (2026-08-23)
+
+Aucun de ces chantiers n'est commencé — notés à la demande de l'utilisateur.
+Contrairement aux autres sections de ce document, ce ne sont pas des
+fonctionnalités mais de la dette qui devient plus coûteuse à combler plus
+l'app grossit (on vient d'ajouter contexte bâtiment, checklists, RAG,
+extraction de documents — tout ça sans un seul test d'intégration ni revue de
+sécurité).
+
+### Sécurité
+
+**Déjà en place** (pour ne pas repartir de zéro dans une future revue) :
+JWT + bcrypt (`backend/app/security.py`), requêtes paramétrées partout
+(aucune concaténation SQL de valeurs utilisateur), `CORS_ORIGINS` scopé par
+environnement, accès aux photos vérifié par propriétaire (`JOIN` sur
+`inspections.user_id` dans `GET /api/photos/{photo_id}`), validation de
+type/taille sur tous les uploads (photos, déclaration du vendeur), Azure Blob
+avec `allowBlobPublicAccess: false`.
+
+**Gaps identifiés en construisant les fonctionnalités récentes** :
+- Aucune limite de débit sur les endpoints qui coûtent de l'argent par appel
+  — en particulier `POST /api/inspections/extract-disclosure`
+  (`backend/app/routers/inspections.py`), qui appelle Claude sans passer par
+  `effective_inspection_limit`/`effective_photo_limit` (`app/limits.py`) —
+  un compte compromis ou un abus pourrait générer des coûts Claude
+  arbitraires sans qu'aucune limite existante ne s'applique.
+- Aucun header de sécurité (CSP, HSTS, X-Frame-Options...) sur les réponses
+  FastAPI (`backend/app/main.py`).
+- `npm install` du frontend a déjà signalé 3 vulnérabilités "high severity"
+  en dépendances (`npm audit` jamais lancé pour voir lesquelles) — aucun scan
+  de dépendances (`npm audit`, `pip-audit`/`safety`) intégré à la CI
+  (`.github/workflows/build-and-push.yaml`).
+- Aucun log d'audit sur les actions admin (création/désactivation
+  d'inspecteur, reset de mot de passe — `backend/app/routers/admin.py`).
+- Mot de passe réinitialisé par un admin sans expiration ni changement forcé
+  à la première connexion.
+
+### Pentest
+
+Pas encore fait — à planifier une fois l'app utilisée par de vrais
+inspecteurs (donc de vraies données clients : adresses, noms, déclarations de
+vendeurs) plutôt qu'avant, pour ne pas tester une surface qui va encore
+bouger. Premier pas peu coûteux disponible dès maintenant : la skill
+`security-review` de ce projet peut auditer le diff en cours à la demande, à
+lancer avant chaque changement touchant l'auth/les uploads/les paiements
+futurs (Phase 2) plutôt que d'attendre un audit externe.
+
+### Tests d'intégration (backend)
+
+La suite actuelle (`backend/tests/`) est **volontairement DB-free**
+(`conftest.py`) — elle ne couvre que des modules purs (constants, security,
+pdf, claude_client, storage). **Aucun test ne touche une vraie base Postgres**
+: `create_inspection`, `upload_photo`, les endpoints de checklist/checklist
+sécurité, `queue_inspection`, `finalize_inspection` n'ont aucune couverture
+au-delà de la vérification manuelle. Il manque :
+- Une base Postgres de test (conteneur éphémère en CI, ex. service
+  `postgres:16` dans `build-and-push.yaml` + migration appliquée) — sans ça,
+  impossible de tester les routes qui touchent `conn`.
+- Un test de bout en bout du pipeline complet : créer une inspection →
+  uploader une photo → `queue` → le worker traite (`backend/worker/worker.py`)
+  → `REVIEW` → réviser → `finalize` → télécharger le PDF — c'est le chemin
+  critique du produit et il n'est jamais testé automatiquement aujourd'hui.
+
+### Tests fonctionnels automatisés (frontend)
+
+Aucun outil de test installé côté frontend (`frontend/package.json` n'a que
+`typescript`/`tailwind`/`eslint` en devDependencies) — la seule vérification
+actuelle est `tsc --noEmit` + `next build`, qui attrapent des erreurs de
+type, pas des régressions de comportement. Zones les plus à risque à couvrir
+en premier, précisément parce qu'on y a déjà trouvé et corrigé un vrai bug
+cette session (photo supprimée localement mais jamais côté serveur) :
+- La synchronisation hors-ligne (`frontend/lib/offline-db.ts`,
+  `syncPhotos`/`handleRemove` dans `capture/page.tsx`) — logique la plus
+  complexe de l'app, la plus difficile à vérifier manuellement (nécessite de
+  simuler une coupure réseau).
+- Le flux complet capture → révision → rapport, en E2E (Playwright — déjà
+  compatible avec le service worker Serwist en place, contrairement à
+  certains outils plus anciens).
+
+---
+
 ## Localisation précise par photo (2026-08-23)
 
 Fonctionnalité scindée en deux (décision utilisateur) :
@@ -178,10 +259,18 @@ géolocalisation, sections). Ce qui manque, ce sont des endpoints d'agrégation 
 
 ## Ordre suggéré
 
-1. Migrations réelles (Alembic) + envoi de courriel — prérequis transverses aux deux
+1. **Sécurité — le gap sur `extract-disclosure` en particulier** (voir
+   "Sécurité, pentest, tests d'intégration et fonctionnels" ci-dessus) : coût
+   Claude non plafonné, à corriger avant d'ouvrir l'app à plus d'un
+   utilisateur — indépendant de l'ordre ci-dessous, à faire dès que possible.
+2. Migrations réelles (Alembic) + envoi de courriel — prérequis transverses aux deux
    phases suivantes.
-2. Phase 1 (invitations) — débloque l'onboarding de plusieurs organisations pilotes.
-3. Phase 3 (métriques) — peut démarrer en parallèle de la Phase 1 pour les
+3. Phase 1 (invitations) — débloque l'onboarding de plusieurs organisations pilotes.
+4. Phase 3 (métriques) — peut démarrer en parallèle de la Phase 1 pour les
    métriques qui ne dépendent pas du multi-tenant (coût IA, saisonnalité, géo), et
    se termine une fois le multi-tenant en place pour le scoping par organisation.
-4. Phase 2 (abonnement) — une fois la valeur validée avec les pilotes.
+5. Tests d'intégration backend — avant la Phase 2 (abonnement/paiement), pas
+   après : un test de bout en bout du pipeline capture → rapport doit exister
+   avant d'ajouter de la facturation par-dessus un chemin non testé.
+6. Phase 2 (abonnement) — une fois la valeur validée avec les pilotes.
+7. Pentest — une fois de vraies données clients circulent (pilotes actifs).
