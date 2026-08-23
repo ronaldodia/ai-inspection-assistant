@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { compressImage } from '@/lib/compress-image'
+import { readPhotoExif } from '@/lib/photo-exif'
 import { SECTION_TYPES, sectionLabel } from '@/lib/sections'
 import {
   deletePhoto,
@@ -128,7 +129,9 @@ export default function CapturePage() {
     let index = 0
     for (const file of accepted) {
       try {
-        const blob = await compressImage(file)
+        // L'EXIF doit être lu sur le fichier original — compressImage()
+        // réencode via canvas et ne préserve aucune métadonnée.
+        const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
         const clientPhotoId = crypto.randomUUID()
         await savePhoto({
           clientPhotoId,
@@ -136,9 +139,9 @@ export default function CapturePage() {
           blob,
           photoOrder: startOrder + index,
           sectionType: section,
-          lat: null,
-          lon: null,
-          takenAt: new Date().toISOString(),
+          lat: exif.lat,
+          lon: exif.lon,
+          takenAt: exif.takenAt ?? new Date().toISOString(),
           uploaded: false,
         })
         index += 1
