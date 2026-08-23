@@ -1,15 +1,15 @@
 SECTION_LABELS = {
+    "structure": "Structure",
     "exterieur": "Extérieur",
     "toiture": "Toiture",
-    "structure": "Structure",
-    "fondation": "Fondation",
-    "vide_sanitaire": "Vide sanitaire",
     "plomberie": "Plomberie",
     "electricite": "Électricité",
-    "chauffage_ventilation": "Chauffage et ventilation",
-    "isolation": "Isolation",
+    "chauffage": "Chauffage",
+    "climatisation_ventilation_mecanique": "Climatisation et ventilation mécanique",
     "interieur": "Intérieur",
-    "comble": "Comble",
+    "isolation": "Isolation",
+    "ventilation": "Ventilation",
+    "securite": "Sécurité des personnes",
     "autre": "Autre",
 }
 
@@ -61,3 +61,81 @@ CHECKLIST_STATUS_LABELS = {
 
 def checklist_status_label(status: str) -> str:
     return CHECKLIST_STATUS_LABELS.get(status, status)
+
+
+FOUNDATION_TYPE_LABELS = {
+    "beton_coule": "Béton coulé",
+    "blocs_beton": "Blocs de béton",
+    "pierre": "Pierre",
+    "pieux": "Pieux",
+    "dalle": "Dalle",
+}
+
+
+def foundation_type_label(foundation_type: str | None) -> str:
+    if not foundation_type:
+        return ""
+    return FOUNDATION_TYPE_LABELS.get(foundation_type, foundation_type)
+
+
+HEATING_TYPE_LABELS = {
+    "electrique": "Électrique",
+    "gaz_naturel": "Gaz naturel",
+    "mazout": "Mazout",
+    "thermopompe": "Thermopompe",
+    "bienergie": "Biénergie",
+}
+
+
+def heating_type_label(heating_type: str | None) -> str:
+    if not heating_type:
+        return ""
+    return HEATING_TYPE_LABELS.get(heating_type, heating_type)
+
+
+YES_NO_PARTIAL_LABELS = {"oui": "Oui", "non": "Non", "partiel": "Partiel"}
+
+
+def yes_no_partial_label(value: str | None) -> str:
+    if not value:
+        return ""
+    return YES_NO_PARTIAL_LABELS.get(value, value)
+
+
+# Checklist Sécurité des personnes (Section 11 AIBQ) — vocabulaire Oui/Non/N.A.
+# distinct de la checklist générique des 11 autres sections (conforme/
+# déficient/...), car il s'agit d'une vérification de présence, pas d'une
+# recherche de défaut visuel.
+SECURITY_CHECKLIST_ITEMS = {
+    "detecteur_fumee_niveaux": "Détecteur de fumée à chaque niveau",
+    "detecteur_fumee_chambres": "Détecteur de fumée dans chaque chambre",
+    "detecteur_co": "Détecteur de monoxyde de carbone (si combustion/garage)",
+    "garde_corps_escalier": "Garde-corps en haut d'escalier",
+    "main_courante": "Main courante présente",
+    "porte_garage_renversement": "Porte de garage avec renversement automatique",
+    "odeur_gaz": "Odeur de gaz détectée",
+}
+
+SECURITY_STATUS_LABELS = {"oui": "Oui", "non": "Non", "na": "N/A"}
+
+
+def security_status_label(status: str) -> str:
+    return SECURITY_STATUS_LABELS.get(status, status)
+
+
+def security_item_label(item_key: str) -> str:
+    return SECURITY_CHECKLIST_ITEMS.get(item_key, item_key)
+
+
+# Valeur qui doit déclencher une alerte visuelle — "non" (absence d'un élément
+# de sécurité) pour la plupart des items, "oui" pour odeur_gaz (le document
+# source est explicite : "QUITTER IMMÉDIATEMENT").
+SECURITY_ALERT_VALUE = {
+    "detecteur_fumee_niveaux": "non",
+    "detecteur_fumee_chambres": "non",
+    "detecteur_co": "non",
+    "garde_corps_escalier": "non",
+    "main_courante": "non",
+    "porte_garage_renversement": "non",
+    "odeur_gaz": "oui",
+}

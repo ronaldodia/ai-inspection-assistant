@@ -5,8 +5,23 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { sectionLabel } from '@/lib/sections'
-import { CHECKLIST_STATUSES, SEVERITIES } from '@/lib/inspectionOptions'
-import type { Anomaly, ChecklistItem, DisclosureItem, InspectionDetail, Photo } from '@/lib/types'
+import {
+  CHECKLIST_STATUSES,
+  SECURITY_ALERT_VALUE,
+  SECURITY_CHECKLIST_ITEMS,
+  SECURITY_STATUSES,
+  SEVERITIES,
+} from '@/lib/inspectionOptions'
+import type {
+  Anomaly,
+  ChecklistItem,
+  DisclosureItem,
+  InspectionDetail,
+  Photo,
+  SecurityChecklistItem,
+} from '@/lib/types'
+
+const SECURITY_ITEM_LABELS: Record<string, string> = Object.fromEntries(SECURITY_CHECKLIST_ITEMS)
 
 export default function ReviewPage() {
   const token = useRequireAuth()
@@ -51,6 +66,19 @@ export default function ReviewPage() {
     )
   }
 
+  function updateSecurityChecklistItem(itemKey: string, status: string, notes: string) {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            security_checklist: prev.security_checklist.map((c) =>
+              c.item_key === itemKey ? { ...c, status, notes } : c
+            ),
+          }
+        : prev
+    )
+  }
+
   async function saveAll() {
     if (!data) return
     setSaving(true)
@@ -64,6 +92,12 @@ export default function ReviewPage() {
       }
       for (const item of data.checklist) {
         await api.updateChecklistItem(params.id, item.system_type, {
+          status: item.status,
+          notes: item.notes,
+        })
+      }
+      for (const item of data.security_checklist) {
+        await api.updateSecurityChecklistItem(params.id, item.item_key, {
           status: item.status,
           notes: item.notes,
         })
@@ -105,6 +139,13 @@ export default function ReviewPage() {
             photos={data.photos}
             disclosureItems={data.inspection.disclosure_items ?? []}
             onChange={updateChecklistItem}
+          />
+        )}
+
+        {data.security_checklist.length > 0 && (
+          <SecurityChecklistPanel
+            securityChecklist={data.security_checklist}
+            onChange={updateSecurityChecklistItem}
           />
         )}
 
@@ -214,6 +255,60 @@ function ChecklistPanel({
               <input
                 value={item.notes ?? ''}
                 onChange={(e) => onChange(item.system_type, item.status, e.target.value)}
+                placeholder="Note (optionnel)"
+                className="mt-1 w-full rounded border border-stone-200 px-2 py-1 text-xs"
+              />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function SecurityChecklistPanel({
+  securityChecklist,
+  onChange,
+}: {
+  securityChecklist: SecurityChecklistItem[]
+  onChange: (itemKey: string, status: string, notes: string) => void
+}) {
+  return (
+    <section className="bg-white rounded-lg border border-stone-200 p-4">
+      <h2 className="text-sm font-medium text-stone-700 mb-3">Sécurité des personnes</h2>
+      <div className="space-y-2">
+        {securityChecklist.map((item) => {
+          const alert = item.status !== 'na' && item.status === SECURITY_ALERT_VALUE[item.item_key]
+          return (
+            <div
+              key={item.item_key}
+              className={`border-b border-stone-100 pb-2 last:border-0 ${alert ? 'bg-red-50 -mx-2 px-2 rounded' : ''}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-sm text-stone-700">
+                  {SECURITY_ITEM_LABELS[item.item_key] ?? item.item_key}
+                  {alert && ' ⚠️'}
+                </span>
+                <div className="flex gap-1">
+                  {SECURITY_STATUSES.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onChange(item.item_key, value, item.notes ?? '')}
+                      className={`rounded border px-2 py-1 text-xs ${
+                        item.status === value
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-stone-300 text-stone-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                value={item.notes ?? ''}
+                onChange={(e) => onChange(item.item_key, item.status, e.target.value)}
                 placeholder="Note (optionnel)"
                 className="mt-1 w-full rounded border border-stone-200 px-2 py-1 text-xs"
               />

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from psycopg.types.json import Json
 
 from app.claude_client import extract_disclosure
-from app.constants import SECTION_LABELS
+from app.constants import SECTION_LABELS, SECURITY_CHECKLIST_ITEMS
 from app.db import get_conn
 from app.deps import get_current_user, get_owned_inspection
 from app.limits import effective_inspection_limit, effective_photo_limit
@@ -15,6 +15,7 @@ from app.schemas import (
     CreateInspectionRequest,
     UpdateAnomaliesRequest,
     UpdateChecklistItemRequest,
+    UpdateSecurityChecklistItemRequest,
     UpdateSynthesisRequest,
 )
 from app.storage import storage
@@ -70,8 +71,9 @@ def create_inspection(
         INSERT INTO inspections
             (user_id, address, inspection_type, notes, lat, lon, building_type,
              year_built, client_name, weather_conditions, temperature_celsius,
-             humidity_percent, disclosure_items)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             humidity_percent, floor_count, area_sqft, foundation_type, heating_type,
+             last_renovation_year, has_basement, has_crawlspace, has_attic, disclosure_items)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
         """,
         (
@@ -87,17 +89,30 @@ def create_inspection(
             data.weather_conditions,
             data.temperature_celsius,
             data.humidity_percent,
+            data.floor_count,
+            data.area_sqft,
+            data.foundation_type,
+            data.heating_type,
+            data.last_renovation_year,
+            data.has_basement,
+            data.has_crawlspace,
+            data.has_attic,
             Json([item.model_dump() for item in data.disclosure_items] if data.disclosure_items else []),
         ),
     ).fetchone()
 
-    # Checklist pré-remplie pour tous les systèmes connus dès la création — la
+    # Checklist générique pré-remplie pour toutes les sections sauf Sécurité,
+    # qui a son propre modèle (statuts Oui/Non/N.A., voir plus bas) — la
     # couverture d'inspection est explicite (non_inspecte par défaut) plutôt que
     # déduite après coup de la simple présence de photos.
     with conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO inspection_checklist_items (inspection_id, system_type) VALUES (%s, %s)",
-            [(row["id"], system_type) for system_type in SECTION_LABELS],
+            [(row["id"], system_type) for system_type in SECTION_LABELS if system_type != "securite"],
+        )
+        cur.executemany(
+            "INSERT INTO inspection_security_checklist_items (inspection_id, item_key) VALUES (%s, %s)",
+            [(row["id"], item_key) for item_key in SECURITY_CHECKLIST_ITEMS],
         )
     conn.commit()
     return row
@@ -147,7 +162,21 @@ def get_inspection(
     ).fetchall()
     section_order = {system_type: i for i, system_type in enumerate(SECTION_LABELS)}
     checklist.sort(key=lambda item: section_order.get(item["system_type"], len(section_order)))
-    return {"inspection": inspection, "photos": photos, "report": report, "checklist": checklist}
+
+    security_checklist = conn.execute(
+        "SELECT item_key, status, notes, updated_at FROM inspection_security_checklist_items WHERE inspection_id = %s",
+        (inspection_id,),
+    ).fetchall()
+    security_order = {item_key: i for i, item_key in enumerate(SECURITY_CHECKLIST_ITEMS)}
+    security_checklist.sort(key=lambda item: security_order.get(item["item_key"], len(security_order)))
+
+    return {
+        "inspection": inspection,
+        "photos": photos,
+        "report": report,
+        "checklist": checklist,
+        "security_checklist": security_checklist,
+    }
 
 
 @router.post("/{inspection_id}/photos")
@@ -309,6 +338,32 @@ def update_checklist_item(
     return {"ok": True}
 
 
+@router.patch("/{inspection_id}/security-checklist/{item_key}")
+def update_security_checklist_item(
+    inspection_id: str,
+    item_key: str,
+    data: UpdateSecurityChecklistItemRequest,
+    user=Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    inspection = get_owned_inspection(conn, inspection_id, user["id"])
+    if inspection["status"] != "REVIEW":
+        raise HTTPException(status_code=400, detail="L'inspection n'est pas en révision")
+
+    result = conn.execute(
+        """
+        UPDATE inspection_security_checklist_items
+        SET status = %s, notes = %s, updated_at = now()
+        WHERE inspection_id = %s AND item_key = %s
+        """,
+        (data.status, data.notes, inspection_id, item_key),
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Élément de sécurité introuvable pour cette inspection")
+    conn.commit()
+    return {"ok": True}
+
+
 @router.patch("/{inspection_id}/synthesis")
 def update_synthesis(
     inspection_id: str,
@@ -358,6 +413,13 @@ def finalize_inspection(
     section_order = {system_type: i for i, system_type in enumerate(SECTION_LABELS)}
     checklist.sort(key=lambda item: section_order.get(item["system_type"], len(section_order)))
 
+    security_checklist = conn.execute(
+        "SELECT item_key, status, notes FROM inspection_security_checklist_items WHERE inspection_id = %s",
+        (inspection_id,),
+    ).fetchall()
+    security_order = {item_key: i for i, item_key in enumerate(SECURITY_CHECKLIST_ITEMS)}
+    security_checklist.sort(key=lambda item: security_order.get(item["item_key"], len(security_order)))
+
     report_number = report["report_number"] if report else None
     if not report_number:
         seq = conn.execute("SELECT nextval('report_number_seq') AS n").fetchone()
@@ -367,7 +429,13 @@ def finalize_inspection(
     inspection_data = {**dict(inspection), "completed_at": completed_at}
 
     pdf_filename = generate_report_pdf(
-        inspection_data, photos, checklist, report["synthesis"] if report else "", report_number, user
+        inspection_data,
+        photos,
+        checklist,
+        security_checklist,
+        report["synthesis"] if report else "",
+        report_number,
+        user,
     )
 
     conn.execute(

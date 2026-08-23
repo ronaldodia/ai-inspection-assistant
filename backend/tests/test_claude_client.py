@@ -78,10 +78,10 @@ def test_analyze_photo_uses_french_section_label_in_prompt(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
-    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "vide_sanitaire")
+    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "securite")
 
     prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
-    assert "Vide sanitaire" in prompt_text
+    assert "Sécurité des personnes" in prompt_text
 
 
 def test_analyze_photo_injects_knowledge_context_when_available(monkeypatch):
@@ -113,7 +113,7 @@ def test_analyze_photo_includes_building_context_in_prompt(monkeypatch):
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
     claude_client.analyze_photo(
-        b"fake-bytes", "image/jpeg", "comble", building_type="maison_unifamiliale", year_built=1985
+        b"fake-bytes", "image/jpeg", "structure", building_type="maison_unifamiliale", year_built=1985
     )
 
     prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
@@ -125,10 +125,33 @@ def test_analyze_photo_omits_building_context_when_not_provided(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
-    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "comble")
+    claude_client.analyze_photo(b"fake-bytes", "image/jpeg", "structure")
 
     prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
     assert "Bâtiment :" not in prompt_text
+
+
+def test_analyze_photo_includes_extended_aibq_context_fields(monkeypatch):
+    fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", _valid_analysis_json())]))
+    monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
+
+    claude_client.analyze_photo(
+        b"fake-bytes",
+        "image/jpeg",
+        "structure",
+        foundation_type="beton_coule",
+        heating_type="thermopompe",
+        has_basement="partiel",
+        has_crawlspace="oui",
+        has_attic="oui",
+    )
+
+    prompt_text = fake_create.last_kwargs["messages"][0]["content"][1]["text"]
+    assert "fondation béton coulé" in prompt_text
+    assert "chauffage thermopompe" in prompt_text
+    assert "sous-sol partiel" in prompt_text
+    assert "vide sanitaire présent" in prompt_text
+    assert "comble présent" in prompt_text
 
 
 def test_analyze_photo_raises_when_no_text_block(monkeypatch):
@@ -160,10 +183,10 @@ def test_synthesize_report_dedupes_and_translates_section_labels(monkeypatch):
     fake_create = FakeMessagesCreate(FakeResponse([FakeBlock("text", "ok")]))
     monkeypatch.setattr(claude_client._client.messages, "create", fake_create)
 
-    claude_client.synthesize_report("123 rue Test", ["comble", "comble", "autre"], [])
+    claude_client.synthesize_report("123 rue Test", ["structure", "structure", "autre"], [])
 
     prompt_text = fake_create.last_kwargs["messages"][0]["content"]
-    assert "Sections inspectées : Comble, Autre" in prompt_text
+    assert "Sections inspectées : Structure, Autre" in prompt_text
 
 
 def test_synthesize_report_defaults_when_no_sections(monkeypatch):

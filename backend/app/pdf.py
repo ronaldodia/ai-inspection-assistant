@@ -7,7 +7,18 @@ from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageOps
 from weasyprint import HTML
 
-from app.constants import building_type_label, checklist_status_label, mandate_type_label, section_label
+from app.constants import (
+    SECURITY_ALERT_VALUE,
+    building_type_label,
+    checklist_status_label,
+    foundation_type_label,
+    heating_type_label,
+    mandate_type_label,
+    section_label,
+    security_item_label,
+    security_status_label,
+    yes_no_partial_label,
+)
 from app.storage import storage
 
 _env = Environment(
@@ -136,10 +147,24 @@ def _build_disclosure_context(disclosure_items: list[dict]) -> list[dict]:
     ]
 
 
+def _build_security_checklist_context(security_checklist: list[dict]) -> list[dict]:
+    return [
+        {
+            "label": security_item_label(item["item_key"]),
+            "status": item["status"],
+            "status_label": security_status_label(item["status"]),
+            "alert": item["status"] == SECURITY_ALERT_VALUE.get(item["item_key"]),
+            "notes": item.get("notes"),
+        }
+        for item in security_checklist
+    ]
+
+
 def generate_report_pdf(
     inspection: dict,
     photos: list[dict],
     checklist: list[dict],
+    security_checklist: list[dict],
     synthesis: str,
     report_number: str,
     inspector: dict,
@@ -151,7 +176,13 @@ def generate_report_pdf(
         inspection=inspection,
         building_type_display=building_type_label(inspection.get("building_type")),
         mandate_type_display=mandate_type_label(inspection.get("inspection_type")),
+        foundation_type_display=foundation_type_label(inspection.get("foundation_type")),
+        heating_type_display=heating_type_label(inspection.get("heating_type")),
+        has_basement_display=yes_no_partial_label(inspection.get("has_basement")),
+        has_crawlspace_display=yes_no_partial_label(inspection.get("has_crawlspace")),
+        has_attic_display=yes_no_partial_label(inspection.get("has_attic")),
         checklist=_build_checklist_context(checklist),
+        security_checklist=_build_security_checklist_context(security_checklist),
         disclosure_items=_build_disclosure_context(inspection.get("disclosure_items") or []),
         synthesis=synthesis or "",
         severity_labels=SEVERITY_LABELS,

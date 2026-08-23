@@ -4,7 +4,14 @@ import json
 import anthropic
 
 from app.config import settings
-from app.constants import BUILDING_TYPE_LABELS, SECTION_LABELS, building_type_label, section_label
+from app.constants import (
+    BUILDING_TYPE_LABELS,
+    SECTION_LABELS,
+    building_type_label,
+    foundation_type_label,
+    heating_type_label,
+    section_label,
+)
 from app.knowledge import get_context_for_section
 
 _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -181,7 +188,14 @@ def extract_disclosure(document_bytes: bytes, media_type: str) -> dict:
 
 
 def _build_analysis_prompt(
-    section_type: str, building_type: str | None = None, year_built: int | None = None
+    section_type: str,
+    building_type: str | None = None,
+    year_built: int | None = None,
+    foundation_type: str | None = None,
+    heating_type: str | None = None,
+    has_basement: str | None = None,
+    has_crawlspace: str | None = None,
+    has_attic: str | None = None,
 ) -> str:
     prompt = f"Section du bâtiment inspectée : {section_label(section_type)}."
 
@@ -190,6 +204,18 @@ def _build_analysis_prompt(
         building_bits.append(building_type_label(building_type))
     if year_built:
         building_bits.append(f"construit en {year_built}")
+    if foundation_type:
+        building_bits.append(f"fondation {foundation_type_label(foundation_type).lower()}")
+    if heating_type:
+        building_bits.append(f"chauffage {heating_type_label(heating_type).lower()}")
+    if has_basement == "oui":
+        building_bits.append("sous-sol présent")
+    elif has_basement == "partiel":
+        building_bits.append("sous-sol partiel")
+    if has_crawlspace == "oui":
+        building_bits.append("vide sanitaire présent")
+    if has_attic == "oui":
+        building_bits.append("comble présent")
     if building_bits:
         prompt += f" Bâtiment : {', '.join(building_bits)}."
 
@@ -213,6 +239,11 @@ def analyze_photo(
     section_type: str,
     building_type: str | None = None,
     year_built: int | None = None,
+    foundation_type: str | None = None,
+    heating_type: str | None = None,
+    has_basement: str | None = None,
+    has_crawlspace: str | None = None,
+    has_attic: str | None = None,
 ) -> dict:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     response = _client.messages.create(
@@ -236,7 +267,16 @@ def analyze_photo(
                     },
                     {
                         "type": "text",
-                        "text": _build_analysis_prompt(section_type, building_type, year_built),
+                        "text": _build_analysis_prompt(
+                            section_type,
+                            building_type,
+                            year_built,
+                            foundation_type,
+                            heating_type,
+                            has_basement,
+                            has_crawlspace,
+                            has_attic,
+                        ),
                     },
                 ],
             }

@@ -4,7 +4,16 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
-import { BUILDING_TYPES, MANDATE_TYPES, WEATHER_CONDITIONS } from '@/lib/inspectionOptions'
+import {
+  BUILDING_TYPES,
+  FLOOR_COUNTS,
+  FOUNDATION_TYPES,
+  HEATING_TYPES,
+  MANDATE_TYPES,
+  WEATHER_CONDITIONS,
+  YES_NO,
+  YES_NO_PARTIAL,
+} from '@/lib/inspectionOptions'
 import { sectionLabel } from '@/lib/sections'
 import type { DisclosureItem } from '@/lib/types'
 
@@ -39,6 +48,14 @@ export default function NewInspectionPage() {
   const [weatherConditions, setWeatherConditions] = useState('')
   const [temperatureCelsius, setTemperatureCelsius] = useState('')
   const [humidityPercent, setHumidityPercent] = useState('')
+  const [floorCount, setFloorCount] = useState('')
+  const [areaSqft, setAreaSqft] = useState('')
+  const [foundationType, setFoundationType] = useState('')
+  const [heatingType, setHeatingType] = useState('')
+  const [lastRenovationYear, setLastRenovationYear] = useState('')
+  const [hasBasement, setHasBasement] = useState('')
+  const [hasCrawlspace, setHasCrawlspace] = useState('')
+  const [hasAttic, setHasAttic] = useState('')
   const [disclosureItems, setDisclosureItems] = useState<DisclosureItem[]>([])
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<string | null>(null)
@@ -85,6 +102,14 @@ export default function NewInspectionPage() {
         weather_conditions: weatherConditions || null,
         temperature_celsius: temperatureCelsius ? Number(temperatureCelsius) : null,
         humidity_percent: humidityPercent ? Number(humidityPercent) : null,
+        floor_count: floorCount || null,
+        area_sqft: areaSqft ? Number(areaSqft) : null,
+        foundation_type: foundationType || null,
+        heating_type: heatingType || null,
+        last_renovation_year: lastRenovationYear ? Number(lastRenovationYear) : null,
+        has_basement: hasBasement || null,
+        has_crawlspace: hasCrawlspace || null,
+        has_attic: hasAttic || null,
         disclosure_items: disclosureItems,
       })
       router.push(`/inspections/${inspection.id}/capture`)
@@ -253,6 +278,123 @@ export default function NewInspectionPage() {
               </div>
             </div>
           </fieldset>
+
+          <details className="border border-stone-200 rounded p-3">
+            <summary className="text-sm font-medium text-stone-700 cursor-pointer">
+              Détails du bâtiment (optionnel)
+            </summary>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Nombre d&apos;étages</label>
+                <select
+                  value={floorCount}
+                  onChange={(e) => setFloorCount(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {FLOOR_COUNTS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Superficie (pi²)</label>
+                <input
+                  type="number"
+                  value={areaSqft}
+                  onChange={(e) => setAreaSqft(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Type de fondation</label>
+                <select
+                  value={foundationType}
+                  onChange={(e) => setFoundationType(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {FOUNDATION_TYPES.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Type de chauffage</label>
+                <select
+                  value={heatingType}
+                  onChange={(e) => setHeatingType(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {HEATING_TYPES.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Dernière rénovation majeure</label>
+                <input
+                  type="number"
+                  value={lastRenovationYear}
+                  onChange={(e) => setLastRenovationYear(e.target.value)}
+                  placeholder="Année, si connue"
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Sous-sol</label>
+                <select
+                  value={hasBasement}
+                  onChange={(e) => setHasBasement(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {YES_NO_PARTIAL.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Vide sanitaire</label>
+                <select
+                  value={hasCrawlspace}
+                  onChange={(e) => setHasCrawlspace(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {YES_NO.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Comble</label>
+                <select
+                  value={hasAttic}
+                  onChange={(e) => setHasAttic(e.target.value)}
+                  className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {YES_NO.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </details>
 
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-1">Notes (optionnel)</label>

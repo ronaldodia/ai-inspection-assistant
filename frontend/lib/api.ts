@@ -70,6 +70,12 @@ export const api = {
       body: JSON.stringify(data),
     }).then((r) => r.json()),
 
+  updateSecurityChecklistItem: (inspectionId: string, itemKey: string, data: Record<string, unknown>) =>
+    request(`/api/inspections/${inspectionId}/security-checklist/${itemKey}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }).then((r) => r.json()),
+
   updateSynthesis: (inspectionId: string, synthesis: string) =>
     request(`/api/inspections/${inspectionId}/synthesis`, {
       method: 'PATCH',

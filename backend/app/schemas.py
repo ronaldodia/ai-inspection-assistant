@@ -30,10 +30,23 @@ class CreateInspectionRequest(BaseModel):
     weather_conditions: str | None = None
     temperature_celsius: int | None = None
     humidity_percent: int | None = None
+    floor_count: str | None = None
+    area_sqft: int | None = None
+    foundation_type: str | None = None
+    heating_type: str | None = None
+    last_renovation_year: int | None = None
+    has_basement: str | None = None
+    has_crawlspace: str | None = None
+    has_attic: str | None = None
     disclosure_items: list[DisclosureItem] | None = None
 
 
 class UpdateChecklistItemRequest(BaseModel):
+    status: str
+    notes: str | None = None
+
+
+class UpdateSecurityChecklistItemRequest(BaseModel):
     status: str
     notes: str | None = None
 

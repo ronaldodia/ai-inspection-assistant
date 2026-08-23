@@ -43,6 +43,10 @@
   .disclosure-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 1em; }
   .disclosure-table th, .disclosure-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e7e5e4; vertical-align: top; }
   .disclosure-table .type-tag { font-size: 8.5pt; color: #57534e; }
+  .security-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 1em; }
+  .security-table th, .security-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e7e5e4; }
+  .security-table tr.alert { background: #fee2e2; }
+  .security-table tr.alert td { color: #991b1b; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -62,6 +66,14 @@
     {% if inspection.weather_conditions %}<div><strong>Météo :</strong> {{ inspection.weather_conditions }}</div>{% endif %}
     {% if inspection.temperature_celsius is not none %}<div><strong>Température :</strong> {{ inspection.temperature_celsius }} °C</div>{% endif %}
     {% if inspection.humidity_percent is not none %}<div><strong>Humidité :</strong> {{ inspection.humidity_percent }} %</div>{% endif %}
+    {% if inspection.floor_count %}<div><strong>Étages :</strong> {{ inspection.floor_count }}</div>{% endif %}
+    {% if inspection.area_sqft %}<div><strong>Superficie :</strong> {{ inspection.area_sqft }} pi²</div>{% endif %}
+    {% if foundation_type_display %}<div><strong>Fondation :</strong> {{ foundation_type_display }}</div>{% endif %}
+    {% if heating_type_display %}<div><strong>Chauffage :</strong> {{ heating_type_display }}</div>{% endif %}
+    {% if inspection.last_renovation_year %}<div><strong>Dernière rénovation :</strong> {{ inspection.last_renovation_year }}</div>{% endif %}
+    {% if has_basement_display %}<div><strong>Sous-sol :</strong> {{ has_basement_display }}</div>{% endif %}
+    {% if has_crawlspace_display %}<div><strong>Vide sanitaire :</strong> {{ has_crawlspace_display }}</div>{% endif %}
+    {% if has_attic_display %}<div><strong>Comble :</strong> {{ has_attic_display }}</div>{% endif %}
   </div>
 
   {% if disclosure_items %}
@@ -86,6 +98,20 @@
     <tr>
       <td>{{ item.system_label }}</td>
       <td><span class="status-badge rag-{{ item.color }}">{{ item.status_label }}</span></td>
+      <td>{{ item.notes or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% if security_checklist %}
+  <h2>Sécurité des personnes</h2>
+  <table class="security-table">
+    <tr><th>Élément</th><th>Statut</th><th>Notes</th></tr>
+    {% for item in security_checklist %}
+    <tr class="{{ 'alert' if item.alert else '' }}">
+      <td>{{ item.label }}</td>
+      <td>{{ item.status_label }}{% if item.alert %} ⚠️{% endif %}</td>
       <td>{{ item.notes or '' }}</td>
     </tr>
     {% endfor %}

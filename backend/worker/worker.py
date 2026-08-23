@@ -29,7 +29,8 @@ def claim_next_inspection(conn: psycopg.Connection) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, address, building_type, year_built
+            SELECT id, address, building_type, year_built, foundation_type, heating_type,
+                   has_basement, has_crawlspace, has_attic
             FROM inspections
             WHERE status = 'QUEUED'
             ORDER BY created_at
@@ -77,6 +78,11 @@ def process_inspection(conn: psycopg.Connection, inspection: dict) -> None:
             photo["section_type"],
             inspection.get("building_type"),
             inspection.get("year_built"),
+            inspection.get("foundation_type"),
+            inspection.get("heating_type"),
+            inspection.get("has_basement"),
+            inspection.get("has_crawlspace"),
+            inspection.get("has_attic"),
         )
         usage = result.pop("_usage")
         all_anomalies.extend(result["anomalies"])
