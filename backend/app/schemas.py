@@ -51,12 +51,18 @@ class UpdateSecurityChecklistItemRequest(BaseModel):
     notes: str | None = None
 
 
+class AnomalyMarker(BaseModel):
+    x: float
+    y: float
+
+
 class AnomalyItem(BaseModel):
     type: str
     severity: str
     location: str
     description: str
     recommendation: str
+    marker: AnomalyMarker | None = None
 
 
 class UpdateAnomaliesRequest(BaseModel):

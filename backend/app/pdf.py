@@ -4,7 +4,7 @@ import os
 import uuid
 
 from jinja2 import Environment, FileSystemLoader
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 from weasyprint import HTML
 
 from app.constants import (
@@ -58,8 +58,34 @@ DISCLOSURE_TYPE_LABELS = {
 
 MAX_IMAGE_WIDTH = 1000
 
+# Repères posés par l'inspecteur en révision (anomaly["marker"] = {x, y} en
+# fraction 0-1 de la largeur/hauteur) — mêmes teintes que .sev-* dans
+# templates/report.html pour rester visuellement cohérent avec le reste du
+# rapport.
+SEVERITY_MARKER_COLOR = {
+    "securite": (127, 29, 29),
+    "majeur": (194, 65, 12),
+    "mineur": (161, 98, 7),
+    "entretien": (71, 85, 105),
+    "observation": (120, 113, 108),
+}
 
-def _photo_data_uri(storage_path: str) -> str | None:
+
+def _draw_markers(img: Image.Image, anomalies: list[dict]) -> None:
+    draw = ImageDraw.Draw(img)
+    radius = max(14, round(img.width * 0.018))
+    for i, anomaly in enumerate(anomalies, start=1):
+        marker = anomaly.get("marker")
+        if not marker:
+            continue
+        cx = marker["x"] * img.width
+        cy = marker["y"] * img.height
+        color = SEVERITY_MARKER_COLOR.get(anomaly.get("severity"), SEVERITY_MARKER_COLOR["observation"])
+        draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=(255, 255, 255), outline=color, width=3)
+        draw.text((cx, cy), str(i), fill=color, anchor="mm")
+
+
+def _photo_data_uri(storage_path: str, anomalies: list[dict] | None = None) -> str | None:
     data = storage.read("photos", storage_path)
     if data is None:
         return None
@@ -69,6 +95,8 @@ def _photo_data_uri(storage_path: str) -> str | None:
         if img.width > MAX_IMAGE_WIDTH:
             ratio = MAX_IMAGE_WIDTH / img.width
             img = img.resize((MAX_IMAGE_WIDTH, round(img.height * ratio)))
+        if anomalies:
+            _draw_markers(img, anomalies)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=80)
     b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
@@ -95,7 +123,7 @@ def build_report_context(photos: list[dict]) -> dict:
         )
         section["photos"].append(
             {
-                "image": _photo_data_uri(photo["storage_path"]),
+                "image": _photo_data_uri(photo["storage_path"], anomalies),
                 "anomalies": anomalies,
                 "rag": RAG_MAP.get(photo.get("overall_condition")),
                 "location_detail": photo.get("location_detail"),

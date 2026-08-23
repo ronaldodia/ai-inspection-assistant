@@ -23,6 +23,16 @@ import type {
 
 const SECURITY_ITEM_LABELS: Record<string, string> = Object.fromEntries(SECURITY_CHECKLIST_ITEMS)
 
+// Mêmes teintes que SEVERITY_MARKER_COLOR côté backend (backend/app/pdf.py) —
+// le repère a la même couleur en révision et dans le rapport PDF final.
+const SEVERITY_MARKER_COLOR: Record<string, string> = {
+  securite: '#7f1d1d',
+  majeur: '#c2410c',
+  mineur: '#a16207',
+  entretien: '#475569',
+  observation: '#78716c',
+}
+
 export default function ReviewPage() {
   const token = useRequireAuth()
   const params = useParams<{ id: string }>()
@@ -328,6 +338,7 @@ function PhotoReviewCard({
   onChange: (anomalies: Anomaly[], condition: string) => void
 }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null)
+  const [placingIndex, setPlacingIndex] = useState<number | null>(null)
   const anomalies: Anomaly[] = photo.anomalies ?? []
   const condition: string = photo.overall_condition ?? 'bon'
 
@@ -350,6 +361,20 @@ function PhotoReviewCard({
     onChange(next, condition)
   }
 
+  function setAnomalyMarker(index: number, marker: { x: number; y: number }) {
+    const next = anomalies.map((a, i) => (i === index ? { ...a, marker } : a))
+    onChange(next, condition)
+  }
+
+  function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (placingIndex === null) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
+    setAnomalyMarker(placingIndex, { x, y })
+    setPlacingIndex(null)
+  }
+
   function removeAnomaly(index: number) {
     onChange(
       anomalies.filter((_, i) => i !== index),
@@ -366,32 +391,59 @@ function PhotoReviewCard({
 
   return (
     <section className="bg-white rounded-lg border border-stone-200 p-4 space-y-3">
-      <div className="flex gap-3">
-        {imgSrc && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imgSrc} alt="" className="w-24 h-24 object-cover rounded flex-shrink-0" />
-        )}
-        <div className="flex-1">
-          <span className="inline-block text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 rounded px-1.5 py-0.5 mb-2">
-            {sectionLabel(photo.section_type)}
+      <div>
+        <span className="inline-block text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 rounded px-1.5 py-0.5 mb-2">
+          {sectionLabel(photo.section_type)}
+        </span>
+        {photo.location_detail && (
+          <span className="inline-block text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 mb-2 ml-1">
+            {photo.location_detail}
           </span>
-          {photo.location_detail && (
-            <span className="inline-block text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 mb-2 ml-1">
-              {photo.location_detail}
-            </span>
+        )}
+      </div>
+
+      {imgSrc && (
+        <div
+          className={`relative ${placingIndex !== null ? 'cursor-crosshair ring-2 ring-blue-500 rounded' : ''}`}
+          onClick={handleImageClick}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imgSrc} alt="" className="w-full h-auto rounded" />
+          {anomalies.map((a, i) =>
+            a.marker ? (
+              <span
+                key={i}
+                className="absolute w-6 h-6 flex items-center justify-center rounded-full bg-white text-[11px] font-bold border-2 pointer-events-none"
+                style={{
+                  left: `${a.marker.x * 100}%`,
+                  top: `${a.marker.y * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  borderColor: SEVERITY_MARKER_COLOR[a.severity] ?? '#78716c',
+                  color: SEVERITY_MARKER_COLOR[a.severity] ?? '#78716c',
+                }}
+              >
+                {i + 1}
+              </span>
+            ) : null
           )}
-          <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
-          <select
-            value={condition}
-            onChange={(e) => onChange(anomalies, e.target.value)}
-            className="rounded border border-stone-300 px-2 py-1 text-sm"
-          >
-            <option value="bon">Bon</option>
-            <option value="acceptable">Acceptable</option>
-            <option value="mauvais">Mauvais</option>
-            <option value="critique">Critique</option>
-          </select>
         </div>
+      )}
+      {placingIndex !== null && (
+        <p className="text-xs text-blue-600">Touchez la photo pour placer le repère.</p>
+      )}
+
+      <div>
+        <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
+        <select
+          value={condition}
+          onChange={(e) => onChange(anomalies, e.target.value)}
+          className="rounded border border-stone-300 px-2 py-1 text-sm"
+        >
+          <option value="bon">Bon</option>
+          <option value="acceptable">Acceptable</option>
+          <option value="mauvais">Mauvais</option>
+          <option value="critique">Critique</option>
+        </select>
       </div>
 
       {anomalies.map((a, i) => (
@@ -438,6 +490,13 @@ function PhotoReviewCard({
             rows={2}
             className="w-full rounded border border-stone-300 px-2 py-1 text-sm"
           />
+          <button
+            type="button"
+            onClick={() => setPlacingIndex(i)}
+            className="text-xs text-blue-600 font-medium"
+          >
+            {a.marker ? `📍 Repositionner (${i + 1})` : `📍 Marquer sur la photo (${i + 1})`}
+          </button>
         </div>
       ))}
 

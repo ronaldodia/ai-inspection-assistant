@@ -1,4 +1,7 @@
+import io
 import os
+
+from PIL import Image
 
 from app.pdf import build_report_context, generate_report_pdf
 
@@ -12,13 +15,16 @@ def _photo(section_type, anomalies, overall_condition="bon", storage_path="missi
     }
 
 
-def _anomaly(type_="moisissure", severity="mineur", location="coin", description="d", recommendation="r"):
+def _anomaly(
+    type_="moisissure", severity="mineur", location="coin", description="d", recommendation="r", marker=None
+):
     return {
         "type": type_,
         "severity": severity,
         "location": location,
         "description": description,
         "recommendation": recommendation,
+        "marker": marker,
     }
 
 
@@ -107,6 +113,28 @@ def test_build_report_context_photo_image_none_when_file_missing():
     context = build_report_context(photos)
     section = next(iter(context["sections"]))
     assert section["photos"][0]["image"] is None
+
+
+def test_photo_data_uri_draws_marker_when_anomaly_has_one(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.storage import storage
+
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+    buf = io.BytesIO()
+    Image.new("RGB", (200, 150), color=(10, 10, 10)).save(buf, format="JPEG")
+    storage.write("photos", "test.jpg", buf.getvalue())
+
+    without_marker = build_report_context([_photo("structure", [_anomaly()], storage_path="test.jpg")])
+    with_marker = build_report_context(
+        [_photo("structure", [_anomaly(marker={"x": 0.5, "y": 0.5})], storage_path="test.jpg")]
+    )
+
+    image_without = next(iter(without_marker["sections"]))["photos"][0]["image"]
+    image_with = next(iter(with_marker["sections"]))["photos"][0]["image"]
+
+    assert image_without is not None
+    assert image_with is not None
+    assert image_without != image_with
 
 
 def test_generate_report_pdf_writes_a_pdf_file(tmp_path, monkeypatch):

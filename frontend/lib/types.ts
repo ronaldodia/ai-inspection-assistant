@@ -4,6 +4,7 @@ export interface Anomaly {
   location: string
   description: string
   recommendation: string
+  marker?: { x: number; y: number } | null
 }
 
 export interface Photo {
