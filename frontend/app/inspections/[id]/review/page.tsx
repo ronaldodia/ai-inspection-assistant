@@ -5,29 +5,33 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { sectionLabel } from '@/lib/sections'
+import {
+  CHECKLIST_STATUSES,
+  SECURITY_ALERT_VALUE,
+  SECURITY_CHECKLIST_ITEMS,
+  SECURITY_STATUSES,
+  SEVERITIES,
+} from '@/lib/inspectionOptions'
+import type {
+  Anomaly,
+  ChecklistItem,
+  DisclosureItem,
+  InspectionDetail,
+  Photo,
+  SecurityChecklistItem,
+} from '@/lib/types'
 
-interface Anomaly {
-  type: string
-  severity: string
-  location: string
-  description: string
-  recommendation: string
+const SECURITY_ITEM_LABELS: Record<string, string> = Object.fromEntries(SECURITY_CHECKLIST_ITEMS)
+
+// Mêmes teintes que SEVERITY_MARKER_COLOR côté backend (backend/app/pdf.py) —
+// le repère a la même couleur en révision et dans le rapport PDF final.
+const SEVERITY_MARKER_COLOR: Record<string, string> = {
+  securite: '#7f1d1d',
+  majeur: '#c2410c',
+  mineur: '#a16207',
+  entretien: '#475569',
+  observation: '#78716c',
 }
-
-interface Photo {
-  id: string
-  section_type: string
-  anomalies: Anomaly[] | null
-  overall_condition: string | null
-}
-
-interface InspectionDetail {
-  inspection: { id: string; address: string; status: string }
-  photos: Photo[]
-  report: { synthesis: string | null } | null
-}
-
-const SEVERITIES = ['mineure', 'majeure', 'critique']
 
 export default function ReviewPage() {
   const token = useRequireAuth()
@@ -59,6 +63,32 @@ export default function ReviewPage() {
     )
   }
 
+  function updateChecklistItem(systemType: string, status: string, notes: string) {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            checklist: prev.checklist.map((c) =>
+              c.system_type === systemType ? { ...c, status, notes } : c
+            ),
+          }
+        : prev
+    )
+  }
+
+  function updateSecurityChecklistItem(itemKey: string, status: string, notes: string) {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            security_checklist: prev.security_checklist.map((c) =>
+              c.item_key === itemKey ? { ...c, status, notes } : c
+            ),
+          }
+        : prev
+    )
+  }
+
   async function saveAll() {
     if (!data) return
     setSaving(true)
@@ -68,6 +98,18 @@ export default function ReviewPage() {
         await api.updateAnomaly(params.id, photo.id, {
           anomalies: photo.anomalies ?? [],
           overall_condition: photo.overall_condition ?? 'bon',
+        })
+      }
+      for (const item of data.checklist) {
+        await api.updateChecklistItem(params.id, item.system_type, {
+          status: item.status,
+          notes: item.notes,
+        })
+      }
+      for (const item of data.security_checklist) {
+        await api.updateSecurityChecklistItem(params.id, item.item_key, {
+          status: item.status,
+          notes: item.notes,
         })
       }
       await api.updateSynthesis(params.id, synthesis)
@@ -101,6 +143,22 @@ export default function ReviewPage() {
       </header>
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
+        {data.checklist.length > 0 && (
+          <ChecklistPanel
+            checklist={data.checklist}
+            photos={data.photos}
+            disclosureItems={data.inspection.disclosure_items ?? []}
+            onChange={updateChecklistItem}
+          />
+        )}
+
+        {data.security_checklist.length > 0 && (
+          <SecurityChecklistPanel
+            securityChecklist={data.security_checklist}
+            onChange={updateSecurityChecklistItem}
+          />
+        )}
+
         <section className="bg-white rounded-lg border border-stone-200 p-4">
           <label className="block text-sm font-medium text-stone-700 mb-2">Synthèse générale</label>
           <textarea
@@ -143,6 +201,135 @@ export default function ReviewPage() {
   )
 }
 
+// Statut suggéré (indicatif seulement, jamais imposé) à partir des anomalies déjà
+// détectées pour ce système, pour aider l'inspecteur à démarrer sans tout ressaisir.
+function suggestedStatus(systemType: string, photos: Photo[]): string | null {
+  const systemPhotos = photos.filter((p) => p.section_type === systemType)
+  if (systemPhotos.length === 0) return null
+  const anomalies = systemPhotos.flatMap((p) => p.anomalies ?? [])
+  if (anomalies.some((a) => a.severity === 'securite' || a.severity === 'majeur')) return 'deficient'
+  if (anomalies.length > 0) return 'a_surveiller'
+  return 'conforme'
+}
+
+function ChecklistPanel({
+  checklist,
+  photos,
+  disclosureItems,
+  onChange,
+}: {
+  checklist: ChecklistItem[]
+  photos: Photo[]
+  disclosureItems: DisclosureItem[]
+  onChange: (systemType: string, status: string, notes: string) => void
+}) {
+  return (
+    <section className="bg-white rounded-lg border border-stone-200 p-4">
+      <h2 className="text-sm font-medium text-stone-700 mb-3">État par système</h2>
+      <div className="space-y-2">
+        {checklist.map((item) => {
+          const suggestion = item.status === 'non_inspecte' ? suggestedStatus(item.system_type, photos) : null
+          const disclosures = disclosureItems.filter((d) => d.category === item.system_type)
+          return (
+            <div key={item.system_type} className="border-b border-stone-100 pb-2 last:border-0">
+              {disclosures.map((d, i) => (
+                <p key={i} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 mb-1">
+                  📋 Déclaration du vendeur : {d.description}
+                  {d.year ? ` (${d.year})` : ''}
+                </p>
+              ))}
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-sm text-stone-700">{sectionLabel(item.system_type)}</span>
+                {suggestion && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(item.system_type, suggestion, item.notes ?? '')}
+                    className="text-xs text-blue-600"
+                    title="Suggestion basée sur les anomalies détectées"
+                  >
+                    suggéré: {CHECKLIST_STATUSES.find(([v]) => v === suggestion)?.[1]}
+                  </button>
+                )}
+                <select
+                  value={item.status}
+                  onChange={(e) => onChange(item.system_type, e.target.value, item.notes ?? '')}
+                  className="rounded border border-stone-300 px-2 py-1 text-sm"
+                >
+                  {CHECKLIST_STATUSES.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                value={item.notes ?? ''}
+                onChange={(e) => onChange(item.system_type, item.status, e.target.value)}
+                placeholder="Note (optionnel)"
+                className="mt-1 w-full rounded border border-stone-200 px-2 py-1 text-xs"
+              />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function SecurityChecklistPanel({
+  securityChecklist,
+  onChange,
+}: {
+  securityChecklist: SecurityChecklistItem[]
+  onChange: (itemKey: string, status: string, notes: string) => void
+}) {
+  return (
+    <section className="bg-white rounded-lg border border-stone-200 p-4">
+      <h2 className="text-sm font-medium text-stone-700 mb-3">Sécurité des personnes</h2>
+      <div className="space-y-2">
+        {securityChecklist.map((item) => {
+          const alert = item.status !== 'na' && item.status === SECURITY_ALERT_VALUE[item.item_key]
+          return (
+            <div
+              key={item.item_key}
+              className={`border-b border-stone-100 pb-2 last:border-0 ${alert ? 'bg-red-50 -mx-2 px-2 rounded' : ''}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-sm text-stone-700">
+                  {SECURITY_ITEM_LABELS[item.item_key] ?? item.item_key}
+                  {alert && ' ⚠️'}
+                </span>
+                <div className="flex gap-1">
+                  {SECURITY_STATUSES.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onChange(item.item_key, value, item.notes ?? '')}
+                      className={`rounded border px-2 py-1 text-xs ${
+                        item.status === value
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-stone-300 text-stone-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                value={item.notes ?? ''}
+                onChange={(e) => onChange(item.item_key, item.status, e.target.value)}
+                placeholder="Note (optionnel)"
+                className="mt-1 w-full rounded border border-stone-200 px-2 py-1 text-xs"
+              />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function PhotoReviewCard({
   photo,
   onChange,
@@ -151,6 +338,7 @@ function PhotoReviewCard({
   onChange: (anomalies: Anomaly[], condition: string) => void
 }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null)
+  const [placingIndex, setPlacingIndex] = useState<number | null>(null)
   const anomalies: Anomaly[] = photo.anomalies ?? []
   const condition: string = photo.overall_condition ?? 'bon'
 
@@ -173,6 +361,20 @@ function PhotoReviewCard({
     onChange(next, condition)
   }
 
+  function setAnomalyMarker(index: number, marker: { x: number; y: number }) {
+    const next = anomalies.map((a, i) => (i === index ? { ...a, marker } : a))
+    onChange(next, condition)
+  }
+
+  function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (placingIndex === null) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
+    setAnomalyMarker(placingIndex, { x, y })
+    setPlacingIndex(null)
+  }
+
   function removeAnomaly(index: number) {
     onChange(
       anomalies.filter((_, i) => i !== index),
@@ -182,34 +384,66 @@ function PhotoReviewCard({
 
   function addAnomaly() {
     onChange(
-      [...anomalies, { type: 'autre', severity: 'mineure', location: '', description: '', recommendation: '' }],
+      [...anomalies, { type: 'autre', severity: 'observation', location: '', description: '', recommendation: '' }],
       condition
     )
   }
 
   return (
     <section className="bg-white rounded-lg border border-stone-200 p-4 space-y-3">
-      <div className="flex gap-3">
-        {imgSrc && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imgSrc} alt="" className="w-24 h-24 object-cover rounded flex-shrink-0" />
-        )}
-        <div className="flex-1">
-          <span className="inline-block text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 rounded px-1.5 py-0.5 mb-2">
-            {sectionLabel(photo.section_type)}
+      <div>
+        <span className="inline-block text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 rounded px-1.5 py-0.5 mb-2">
+          {sectionLabel(photo.section_type)}
+        </span>
+        {photo.location_detail && (
+          <span className="inline-block text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 mb-2 ml-1">
+            {photo.location_detail}
           </span>
-          <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
-          <select
-            value={condition}
-            onChange={(e) => onChange(anomalies, e.target.value)}
-            className="rounded border border-stone-300 px-2 py-1 text-sm"
-          >
-            <option value="bon">Bon</option>
-            <option value="acceptable">Acceptable</option>
-            <option value="mauvais">Mauvais</option>
-            <option value="critique">Critique</option>
-          </select>
+        )}
+      </div>
+
+      {imgSrc && (
+        <div
+          className={`relative ${placingIndex !== null ? 'cursor-crosshair ring-2 ring-blue-500 rounded' : ''}`}
+          onClick={handleImageClick}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imgSrc} alt="" className="w-full h-auto rounded" />
+          {anomalies.map((a, i) =>
+            a.marker ? (
+              <span
+                key={i}
+                className="absolute w-6 h-6 flex items-center justify-center rounded-full bg-white text-[11px] font-bold border-2 pointer-events-none"
+                style={{
+                  left: `${a.marker.x * 100}%`,
+                  top: `${a.marker.y * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  borderColor: SEVERITY_MARKER_COLOR[a.severity] ?? '#78716c',
+                  color: SEVERITY_MARKER_COLOR[a.severity] ?? '#78716c',
+                }}
+              >
+                {i + 1}
+              </span>
+            ) : null
+          )}
         </div>
+      )}
+      {placingIndex !== null && (
+        <p className="text-xs text-blue-600">Touchez la photo pour placer le repère.</p>
+      )}
+
+      <div>
+        <label className="block text-xs font-medium text-stone-500 mb-1">État général</label>
+        <select
+          value={condition}
+          onChange={(e) => onChange(anomalies, e.target.value)}
+          className="rounded border border-stone-300 px-2 py-1 text-sm"
+        >
+          <option value="bon">Bon</option>
+          <option value="acceptable">Acceptable</option>
+          <option value="mauvais">Mauvais</option>
+          <option value="critique">Critique</option>
+        </select>
       </div>
 
       {anomalies.map((a, i) => (
@@ -226,9 +460,9 @@ function PhotoReviewCard({
               onChange={(e) => updateAnomaly(i, 'severity', e.target.value)}
               className="rounded border border-stone-300 px-2 py-1 text-sm"
             >
-              {SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {SEVERITIES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -256,6 +490,13 @@ function PhotoReviewCard({
             rows={2}
             className="w-full rounded border border-stone-300 px-2 py-1 text-sm"
           />
+          <button
+            type="button"
+            onClick={() => setPlacingIndex(i)}
+            className="text-xs text-blue-600 font-medium"
+          >
+            {a.marker ? `📍 Repositionner (${i + 1})` : `📍 Marquer sur la photo (${i + 1})`}
+          </button>
         </div>
       ))}
 

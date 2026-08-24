@@ -1,5 +1,6 @@
 import argparse
 import re
+from pathlib import Path
 
 from psycopg import errors
 from pypdf import PdfReader
@@ -7,6 +8,7 @@ from pypdf import PdfReader
 from app.knowledge import embed_documents, open_connection
 
 ARTICLE_PATTERN = re.compile(r"(?m)^(\d{1,2}\.\d{1,2}\.\d{1,2}\.\d{1,2}\.?)\s")
+MD_SECTION_PATTERN = re.compile(r"(?m)^## (.+)$")
 CHUNK_SIZE = 1600  # ~ 400 tokens
 CHUNK_OVERLAP = 200
 
@@ -59,14 +61,40 @@ def chunk_document(pages: list[tuple[int, str]], source: str) -> list[tuple[str,
     return chunks
 
 
+def chunk_markdown(text: str) -> list[tuple[str, str]]:
+    """Découpe un document Markdown sur ses titres de niveau 2 (## ...) — une
+    entrée par section, avec repli sur _window_chunks si une section dépasse
+    la taille cible. Même structure que _chunk_by_article, adaptée aux titres
+    Markdown plutôt qu'aux numéros d'article d'un code du bâtiment."""
+    matches = list(MD_SECTION_PATTERN.finditer(text))
+    if not matches:
+        return _window_chunks(text.strip(), "")
+
+    chunks = []
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        heading = match.group(1).strip()
+        body = text[start:end].strip()
+        if len(body) <= CHUNK_SIZE:
+            chunks.append((body, heading))
+        else:
+            chunks.extend(_window_chunks(body, heading))
+    return chunks
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ingère un document PDF (Code de construction du Québec, norme AIBQ, "
-        "etc.) dans la base de connaissances du RAG."
+        description="Ingère un document PDF ou Markdown (Code de construction du Québec, "
+        "norme AIBQ, référence des 11 sections, etc.) dans la base de connaissances du RAG."
     )
-    parser.add_argument("pdf_path")
+    parser.add_argument("document_path")
     parser.add_argument("--title", required=True)
-    parser.add_argument("--source", required=True, choices=["code_batiment_qc", "aibq_norme_pratique"])
+    parser.add_argument(
+        "--source",
+        required=True,
+        choices=["code_batiment_qc", "aibq_norme_pratique", "aibq_11_sections"],
+    )
     parser.add_argument("--source-url", default=None)
     parser.add_argument(
         "--license-note",
@@ -76,10 +104,15 @@ def main() -> None:
     parser.add_argument("--replace", action="store_true")
     args = parser.parse_args()
 
-    pages = _extract_pages(args.pdf_path)
-    chunks = chunk_document(pages, args.source)
+    if args.document_path.lower().endswith(".md"):
+        text = Path(args.document_path).read_text(encoding="utf-8")
+        chunks = chunk_markdown(text)
+    else:
+        pages = _extract_pages(args.document_path)
+        chunks = chunk_document(pages, args.source)
+
     if not chunks:
-        print("Aucun texte extractible de ce PDF — abandon.")
+        print("Aucun texte extractible de ce document — abandon.")
         return
 
     print(f"{len(chunks)} extraits identifiés, calcul des embeddings...")

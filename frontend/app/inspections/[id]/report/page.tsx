@@ -4,15 +4,16 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
+import { SEVERITIES } from '@/lib/inspectionOptions'
+import { sectionLabel } from '@/lib/sections'
+import type { InspectionDetail } from '@/lib/types'
 
-interface Anomaly {
-  severity: string
-}
-
-interface InspectionDetail {
-  inspection: { address: string; completed_at: string | null }
-  photos: { anomalies: Anomaly[] | null }[]
-  report: { synthesis: string | null; report_number: string | null } | null
+const SEVERITY_BADGES: Record<string, string> = {
+  securite: '🛑',
+  majeur: '🔴',
+  mineur: '🟡',
+  entretien: '🔧',
+  observation: 'ℹ️',
 }
 
 export default function ReportPage() {
@@ -44,7 +45,7 @@ export default function ReportPage() {
   if (!token || !data) return null
 
   const findings = data.photos.flatMap((p) => p.anomalies ?? [])
-  const counts: Record<string, number> = { critique: 0, majeure: 0, mineure: 0 }
+  const counts: Record<string, number> = Object.fromEntries(SEVERITIES.map(([value]) => [value, 0]))
   findings.forEach((f) => {
     counts[f.severity] = (counts[f.severity] ?? 0) + 1
   })
@@ -73,12 +74,27 @@ export default function ReportPage() {
 
         <div className="bg-white rounded-lg border border-stone-200 p-4">
           <p className="font-medium text-stone-900 mb-2">Anomalies détectées : {findings.length}</p>
-          <div className="flex gap-3 text-sm">
-            <span className="text-red-600">🔴 Critique : {counts.critique}</span>
-            <span className="text-amber-600">🟠 Majeure : {counts.majeure}</span>
-            <span className="text-yellow-600">🟡 Mineure : {counts.mineure}</span>
+          <div className="flex flex-wrap gap-3 text-sm">
+            {SEVERITIES.map(([value, label]) => (
+              <span key={value}>
+                {SEVERITY_BADGES[value]} {label} : {counts[value]}
+              </span>
+            ))}
           </div>
         </div>
+
+        {data.checklist?.some((c) => c.status === 'deficient') && (
+          <div className="bg-white rounded-lg border border-stone-200 p-4">
+            <p className="font-medium text-stone-900 mb-2">Systèmes déficients</p>
+            <ul className="text-sm text-stone-700 list-disc list-inside">
+              {data.checklist
+                .filter((c) => c.status === 'deficient')
+                .map((c) => (
+                  <li key={c.system_type}>{sectionLabel(c.system_type)}</li>
+                ))}
+            </ul>
+          </div>
+        )}
 
         {data.report?.synthesis && (
           <div className="bg-white rounded-lg border border-stone-200 p-4 text-sm text-stone-700 whitespace-pre-wrap">

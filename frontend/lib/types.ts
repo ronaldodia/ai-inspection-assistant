@@ -1,0 +1,68 @@
+export interface Anomaly {
+  type: string
+  severity: string
+  location: string
+  description: string
+  recommendation: string
+  marker?: { x: number; y: number } | null
+}
+
+export interface Photo {
+  id: string
+  section_type: string
+  location_detail: string | null
+  anomalies: Anomaly[] | null
+  overall_condition: string | null
+}
+
+export interface ChecklistItem {
+  system_type: string
+  status: string
+  notes: string | null
+  updated_at?: string
+}
+
+export interface SecurityChecklistItem {
+  item_key: string
+  status: string
+  notes: string | null
+  updated_at?: string
+}
+
+export interface DisclosureItem {
+  category: string
+  type: string
+  description: string
+  year: number | null
+}
+
+export interface Inspection {
+  id: string
+  address: string
+  status: string
+  inspection_type: string
+  building_type: string | null
+  year_built: number | null
+  client_name: string | null
+  weather_conditions: string | null
+  temperature_celsius: number | null
+  humidity_percent: number | null
+  floor_count: string | null
+  area_sqft: number | null
+  foundation_type: string | null
+  heating_type: string | null
+  last_renovation_year: number | null
+  has_basement: string | null
+  has_crawlspace: string | null
+  has_attic: string | null
+  disclosure_items: DisclosureItem[]
+  completed_at: string | null
+}
+
+export interface InspectionDetail {
+  inspection: Inspection
+  photos: Photo[]
+  checklist: ChecklistItem[]
+  security_checklist: SecurityChecklistItem[]
+  report: { synthesis: string | null; report_number: string | null } | null
+}

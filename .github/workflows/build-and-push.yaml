@@ -233,7 +233,11 @@ jobs:
 
   update-manifests:
     needs: [build-backend, build-frontend]
-    if: github.event_name == 'push'
+    # ArgoCD ne suit que k8s/ sur dev — bumper les tags sur main aussi ne sert à
+    # rien (App Service se déploie via deploy-azure, pas depuis ces manifests) et
+    # ne fait que produire des commits bot qui entrent en conflit à chaque rebase
+    # dev -> main / main -> dev sur les mêmes lignes image:.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     permissions:
       contents: write

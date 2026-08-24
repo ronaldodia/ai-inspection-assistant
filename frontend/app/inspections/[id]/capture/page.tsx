@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { compressImage } from '@/lib/compress-image'
+import { readPhotoExif } from '@/lib/photo-exif'
 import { SECTION_TYPES, sectionLabel } from '@/lib/sections'
 import {
   deletePhoto,
@@ -23,6 +24,7 @@ export default function CapturePage() {
 
   const [photos, setPhotos] = useState<PendingPhoto[]>([])
   const [section, setSection] = useState(SECTION_TYPES[0][0])
+  const [location, setLocation] = useState('')
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [syncing, setSyncing] = useState(false)
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -79,12 +81,13 @@ export default function CapturePage() {
         formData.append('client_photo_id', p.clientPhotoId)
         formData.append('photo_order', String(p.photoOrder))
         formData.append('section_type', p.sectionType)
+        if (p.locationDetail) formData.append('location_detail', p.locationDetail)
         if (p.lat != null) formData.append('lat', String(p.lat))
         if (p.lon != null) formData.append('lon', String(p.lon))
         if (p.takenAt) formData.append('taken_at', p.takenAt)
         try {
-          await api.uploadPhoto(inspectionId, formData)
-          await markUploaded(p.clientPhotoId)
+          const result = await api.uploadPhoto(inspectionId, formData)
+          await markUploaded(p.clientPhotoId, result.id)
         } catch (err) {
           // Isolée par photo : un échec (ex. limite atteinte) ne doit pas
           // empêcher les autres photos en attente d'être tentées.
@@ -128,7 +131,9 @@ export default function CapturePage() {
     let index = 0
     for (const file of accepted) {
       try {
-        const blob = await compressImage(file)
+        // L'EXIF doit être lu sur le fichier original — compressImage()
+        // réencode via canvas et ne préserve aucune métadonnée.
+        const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
         const clientPhotoId = crypto.randomUUID()
         await savePhoto({
           clientPhotoId,
@@ -136,9 +141,10 @@ export default function CapturePage() {
           blob,
           photoOrder: startOrder + index,
           sectionType: section,
-          lat: null,
-          lon: null,
-          takenAt: new Date().toISOString(),
+          locationDetail: location || undefined,
+          lat: exif.lat,
+          lon: exif.lon,
+          takenAt: exif.takenAt ?? new Date().toISOString(),
           uploaded: false,
         })
         index += 1
@@ -160,14 +166,23 @@ export default function CapturePage() {
   }
 
   async function handleRemove(clientPhotoId: string) {
+    const photo = photos.find((p) => p.clientPhotoId === clientPhotoId)
+    if (photo?.uploaded && photo.serverId) {
+      // Déjà synchronisée : la retirer côté serveur d'abord (fichier +
+      // ligne en base) — sinon elle reste comptée et analysée par l'IA
+      // même après avoir disparu de cet écran.
+      try {
+        await api.deletePhoto(inspectionId, photo.serverId)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erreur lors de la suppression de la photo')
+        return
+      }
+    }
     await deletePhoto(clientPhotoId)
     await refreshPhotos()
   }
 
-  // Combien de photos en attente dépassent la capacité restante côté serveur —
-  // seules les photos jamais synchronisées peuvent être retirées (une fois
-  // uploadée, une photo fait partie de l'inspection, il n'y a pas d'API pour
-  // la retirer côté serveur).
+  // Combien de photos en attente dépassent la capacité restante côté serveur.
   const uploadedCount = photos.filter((p) => p.uploaded).length
   const pendingCount = photos.filter((p) => !p.uploaded).length
   const remainingCapacity = photoLimit != null ? Math.max(0, photoLimit - uploadedCount) : Infinity
@@ -222,6 +237,15 @@ export default function CapturePage() {
       </header>
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
+        {!online && (
+          <div className="rounded-lg border border-stone-300 bg-stone-100 p-3 text-sm text-stone-700">
+            📴 Hors ligne — vous pouvez continuer à ajouter des photos normalement,
+            mais évitez de rafraîchir la page ou d&apos;utiliser le bouton
+            « précédent » du navigateur : cette page précise ne peut se recharger
+            que si elle a déjà été visitée en ligne.
+          </div>
+        )}
+
         <p className="text-sm text-stone-600">
           {photos.length} photo{photos.length !== 1 ? 's' : ''}
           {photoLimit != null && ` / ${photoLimit}`} capturée{photos.length !== 1 ? 's' : ''}
@@ -246,13 +270,13 @@ export default function CapturePage() {
 
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-2">Section en cours</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {SECTION_TYPES.map(([value, label]) => (
               <button
                 type="button"
                 key={value}
                 onClick={() => setSection(value)}
-                className={`flex-1 rounded border px-3 py-2 text-sm ${
+                className={`rounded border px-2 py-2 text-xs ${
                   section === value
                     ? 'border-blue-600 bg-blue-50 text-blue-700'
                     : 'border-stone-300 text-stone-600'
@@ -264,6 +288,29 @@ export default function CapturePage() {
           </div>
           <p className="text-xs text-stone-500 mt-1">
             Les photos ajoutées ci-dessous seront associées à cette section.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-2">
+            Localisation actuelle (optionnel)
+          </label>
+          <input
+            list="location-suggestions"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="ex. Salle de bain principale"
+            className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+          />
+          <datalist id="location-suggestions">
+            {Array.from(new Set(photos.map((p) => p.locationDetail).filter((v): v is string => !!v))).map(
+              (loc) => (
+                <option key={loc} value={loc} />
+              )
+            )}
+          </datalist>
+          <p className="text-xs text-stone-500 mt-1">
+            Aide l&apos;IA à savoir où elle regarde dans le bâtiment — un mot ou deux suffisent.
           </p>
         </div>
 
@@ -303,6 +350,11 @@ export default function CapturePage() {
               <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
                 {sectionLabel(p.sectionType)}
               </span>
+              {p.locationDetail && (
+                <span className="absolute bottom-1 right-1 bg-blue-600/80 text-white text-[10px] px-1.5 py-0.5 rounded max-w-[70%] truncate">
+                  {p.locationDetail}
+                </span>
+              )}
               {!p.uploaded && (
                 <span className="absolute top-1 left-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded">
                   En attente

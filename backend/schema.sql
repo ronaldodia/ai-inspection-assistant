@@ -31,6 +31,21 @@ CREATE TABLE inspections (
     notes TEXT,
     lat DECIMAL(10, 8),
     lon DECIMAL(11, 8),
+    building_type VARCHAR(50),
+    year_built INT,
+    client_name VARCHAR(255),
+    weather_conditions VARCHAR(50),
+    temperature_celsius INT,
+    humidity_percent INT,
+    floor_count VARCHAR(10),
+    area_sqft INT,
+    foundation_type VARCHAR(50),
+    heating_type VARCHAR(50),
+    last_renovation_year INT,
+    has_basement VARCHAR(10),
+    has_crawlspace VARCHAR(10),
+    has_attic VARCHAR(10),
+    disclosure_items JSONB NOT NULL DEFAULT '[]',
     status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
     error_message TEXT,
     archived_at TIMESTAMPTZ,
@@ -44,6 +59,7 @@ CREATE TABLE photos (
     client_photo_id VARCHAR(100) NOT NULL,
     storage_path VARCHAR(500) NOT NULL,
     section_type VARCHAR(50) NOT NULL DEFAULT 'autre',
+    location_detail VARCHAR(150),
     photo_order INT NOT NULL,
     lat DECIMAL(10, 8),
     lon DECIMAL(11, 8),
@@ -75,6 +91,26 @@ CREATE TABLE reports (
     generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE inspection_checklist_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inspection_id UUID NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+    system_type VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'non_inspecte',
+    notes TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (inspection_id, system_type)
+);
+
+CREATE TABLE inspection_security_checklist_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inspection_id UUID NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+    item_key VARCHAR(50) NOT NULL,
+    status VARCHAR(10) NOT NULL DEFAULT 'na',
+    notes TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (inspection_id, item_key)
+);
+
 CREATE TABLE knowledge_documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL UNIQUE,
@@ -99,3 +135,6 @@ CREATE INDEX idx_photos_inspection_id ON photos(inspection_id);
 CREATE INDEX idx_anomaly_detections_gin ON anomaly_detections USING GIN (anomalies);
 CREATE INDEX idx_knowledge_chunks_document_id ON knowledge_chunks(document_id);
 CREATE INDEX idx_knowledge_chunks_embedding ON knowledge_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_inspection_checklist_items_inspection_id ON inspection_checklist_items(inspection_id);
+CREATE INDEX idx_inspections_disclosure_items_gin ON inspections USING GIN (disclosure_items);
+CREATE INDEX idx_inspection_security_checklist_items_inspection_id ON inspection_security_checklist_items(inspection_id);

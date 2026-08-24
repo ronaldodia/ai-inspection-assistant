@@ -1,4 +1,7 @@
+import io
 import os
+
+from PIL import Image
 
 from app.pdf import build_report_context, generate_report_pdf
 
@@ -12,27 +15,30 @@ def _photo(section_type, anomalies, overall_condition="bon", storage_path="missi
     }
 
 
-def _anomaly(type_="moisissure", severity="mineure", location="coin", description="d", recommendation="r"):
+def _anomaly(
+    type_="moisissure", severity="mineur", location="coin", description="d", recommendation="r", marker=None
+):
     return {
         "type": type_,
         "severity": severity,
         "location": location,
         "description": description,
         "recommendation": recommendation,
+        "marker": marker,
     }
 
 
 def test_build_report_context_groups_photos_by_section():
     photos = [
-        _photo("comble", [_anomaly()]),
-        _photo("comble", [_anomaly()]),
-        _photo("vide_sanitaire", [_anomaly()]),
+        _photo("structure", [_anomaly()]),
+        _photo("structure", [_anomaly()]),
+        _photo("isolation", [_anomaly()]),
     ]
     context = build_report_context(photos)
     sections = {s["label"]: s for s in context["sections"]}
-    assert set(sections) == {"Comble", "Vide sanitaire"}
-    assert len(sections["Comble"]["photos"]) == 2
-    assert len(sections["Vide sanitaire"]["photos"]) == 1
+    assert set(sections) == {"Structure", "Isolation"}
+    assert len(sections["Structure"]["photos"]) == 2
+    assert len(sections["Isolation"]["photos"]) == 1
 
 
 def test_build_report_context_defaults_missing_section_type_to_autre():
@@ -44,20 +50,20 @@ def test_build_report_context_defaults_missing_section_type_to_autre():
 
 def test_build_report_context_counts_severities_across_all_photos():
     photos = [
-        _photo("comble", [_anomaly(severity="critique"), _anomaly(severity="mineure")]),
-        _photo("autre", [_anomaly(severity="majeure")]),
+        _photo("structure", [_anomaly(severity="securite"), _anomaly(severity="mineur")]),
+        _photo("autre", [_anomaly(severity="majeur")]),
     ]
     context = build_report_context(photos)
-    assert context["counts"] == {"critique": 1, "majeure": 1, "mineure": 1}
+    assert context["counts"] == {"securite": 1, "majeur": 1, "mineur": 1, "entretien": 0, "observation": 0}
     assert context["findings_count"] == 3
 
 
-def test_build_report_context_priority_items_excludes_mineure():
+def test_build_report_context_priority_items_excludes_mineur():
     photos = [
-        _photo("comble", [
-            _anomaly(type_="moisissure", severity="critique"),
-            _anomaly(type_="fissure", severity="mineure"),
-            _anomaly(type_="infiltration_eau", severity="majeure"),
+        _photo("structure", [
+            _anomaly(type_="moisissure", severity="securite"),
+            _anomaly(type_="fissure", severity="mineur"),
+            _anomaly(type_="infiltration_eau", severity="majeur"),
         ]),
     ]
     context = build_report_context(photos)
@@ -65,20 +71,20 @@ def test_build_report_context_priority_items_excludes_mineure():
     assert types == {"moisissure", "infiltration_eau"}
 
 
-def test_build_report_context_priority_items_sorted_critique_before_majeure():
+def test_build_report_context_priority_items_sorted_securite_before_majeur():
     photos = [
-        _photo("comble", [_anomaly(type_="a", severity="majeure")]),
-        _photo("autre", [_anomaly(type_="b", severity="critique")]),
+        _photo("structure", [_anomaly(type_="a", severity="majeur")]),
+        _photo("autre", [_anomaly(type_="b", severity="securite")]),
     ]
     context = build_report_context(photos)
     severities = [item["severity"] for item in context["priority_items"]]
-    assert severities == ["critique", "majeure"]
+    assert severities == ["securite", "majeur"]
 
 
 def test_build_report_context_priority_items_carry_section_label():
-    photos = [_photo("vide_sanitaire", [_anomaly(severity="critique")])]
+    photos = [_photo("isolation", [_anomaly(severity="securite")])]
     context = build_report_context(photos)
-    assert context["priority_items"][0]["section_label"] == "Vide sanitaire"
+    assert context["priority_items"][0]["section_label"] == "Isolation"
 
 
 def test_build_report_context_rag_status_mapping():
@@ -89,24 +95,46 @@ def test_build_report_context_rag_status_mapping():
         "critique": "red",
     }
     for condition, expected_level in cases.items():
-        photos = [_photo("comble", [], overall_condition=condition)]
+        photos = [_photo("structure", [], overall_condition=condition)]
         context = build_report_context(photos)
         section = next(iter(context["sections"]))
         assert section["photos"][0]["rag"]["level"] == expected_level
 
 
 def test_build_report_context_rag_status_none_for_unknown_condition():
-    photos = [_photo("comble", [], overall_condition="inconnu")]
+    photos = [_photo("structure", [], overall_condition="inconnu")]
     context = build_report_context(photos)
     section = next(iter(context["sections"]))
     assert section["photos"][0]["rag"] is None
 
 
 def test_build_report_context_photo_image_none_when_file_missing():
-    photos = [_photo("comble", [], storage_path="does-not-exist.jpg")]
+    photos = [_photo("structure", [], storage_path="does-not-exist.jpg")]
     context = build_report_context(photos)
     section = next(iter(context["sections"]))
     assert section["photos"][0]["image"] is None
+
+
+def test_photo_data_uri_draws_marker_when_anomaly_has_one(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.storage import storage
+
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+    buf = io.BytesIO()
+    Image.new("RGB", (200, 150), color=(10, 10, 10)).save(buf, format="JPEG")
+    storage.write("photos", "test.jpg", buf.getvalue())
+
+    without_marker = build_report_context([_photo("structure", [_anomaly()], storage_path="test.jpg")])
+    with_marker = build_report_context(
+        [_photo("structure", [_anomaly(marker={"x": 0.5, "y": 0.5})], storage_path="test.jpg")]
+    )
+
+    image_without = next(iter(without_marker["sections"]))["photos"][0]["image"]
+    image_with = next(iter(with_marker["sections"]))["photos"][0]["image"]
+
+    assert image_without is not None
+    assert image_with is not None
+    assert image_without != image_with
 
 
 def test_generate_report_pdf_writes_a_pdf_file(tmp_path, monkeypatch):
@@ -114,11 +142,24 @@ def test_generate_report_pdf_writes_a_pdf_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(settings, "reports_dir", str(tmp_path))
 
-    inspection = {"id": "test-inspection-id", "address": "123 rue Test", "completed_at": None}
-    photos = [_photo("comble", [_anomaly(severity="critique")])]
+    inspection = {
+        "id": "test-inspection-id",
+        "address": "123 rue Test",
+        "completed_at": None,
+        "inspection_type": "preachat",
+        "building_type": "maison_unifamiliale",
+        "year_built": 1985,
+        "client_name": "Client Test",
+        "weather_conditions": "Ensoleillé",
+        "temperature_celsius": 12,
+        "humidity_percent": 55,
+    }
+    photos = [_photo("structure", [_anomaly(severity="securite")])]
+    checklist = [{"system_type": "structure", "status": "deficient", "notes": None}]
+    security_checklist = [{"item_key": "odeur_gaz", "status": "non", "notes": None}]
 
     filename = generate_report_pdf(
-        inspection, photos, "Synthèse de test", "RAP-2026-00001",
+        inspection, photos, checklist, security_checklist, "Synthèse de test", "RAP-2026-00001",
         {"full_name": "Test Inspecteur", "certification": None},
     )
 

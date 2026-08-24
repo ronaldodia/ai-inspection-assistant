@@ -4,7 +4,14 @@ import json
 import anthropic
 
 from app.config import settings
-from app.constants import section_label
+from app.constants import (
+    BUILDING_TYPE_LABELS,
+    SECTION_LABELS,
+    building_type_label,
+    foundation_type_label,
+    heating_type_label,
+    section_label,
+)
 from app.knowledge import get_context_for_section
 
 _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -26,14 +33,22 @@ variations du même constat.
 Pour chaque anomalie détectée :
 - type : catégorie courte (ex: "moisissure", "infiltration_eau", "isolant_endommage", \
 "fissure", "nuisibles", "ventilation", "autre")
-- severity : "mineure", "majeure" ou "critique"
+- severity : une des 5 catégories suivantes, dans cet ordre de gravité —
+  "securite" (danger immédiat pour les occupants, ex: risque électrique, gaz, \
+  structure compromise — nécessite une action avant l'occupation ou la transaction),
+  "majeur" (affecte la fonction ou la valeur du bâtiment, sans danger immédiat),
+  "mineur" (défaut n'affectant ni la sécurité ni la fonction de façon significative),
+  "entretien" (maintenance préventive à prévoir, pas un défaut en soi),
+  "observation" (note informative, sans action requise).
 - location : où sur la photo (ex: "coin supérieur gauche", "solive de plancher")
 - description : ce qui est observé, factuellement
 - recommendation : action recommandée pour le propriétaire
 
 Si la photo ne montre aucune anomalie, retourne une liste vide et overall_condition \
 = "bon". Sois précis et factuel — ce rapport a une valeur légale et sera relu par \
-l'inspecteur avant d'être remis au client. Ne surestime ni ne minimise la gravité."""
+l'inspecteur avant d'être remis au client. Ne surestime ni ne minimise la gravité — \
+en particulier, ne classe "securite" que pour un danger réel et immédiat, pas par \
+excès de prudence."""
 
 ANOMALY_SCHEMA = {
     "type": "object",
@@ -50,7 +65,7 @@ ANOMALY_SCHEMA = {
                     "type": {"type": "string"},
                     "severity": {
                         "type": "string",
-                        "enum": ["mineure", "majeure", "critique"],
+                        "enum": ["securite", "majeur", "mineur", "entretien", "observation"],
                     },
                     "location": {"type": "string"},
                     "description": {"type": "string"},
@@ -73,8 +88,142 @@ priorité, et termine par une recommandation générale. N'invente rien au-delà
 anomalies fournies."""
 
 
-def _build_analysis_prompt(section_type: str) -> str:
-    prompt = f"Section du bâtiment inspectée : {section_label(section_type)}. Analyse cette photo."
+DISCLOSURE_SYSTEM_PROMPT = f"""Tu extrais les informations utiles d'une déclaration \
+du vendeur (formulaire immobilier standard au Québec, ex. OACIQ — vices connus, \
+rénovations, systèmes présents, garanties) pour préremplir un dossier d'inspection \
+préachat.
+
+Extrais :
+- address : l'adresse du bâtiment si elle apparaît clairement (sinon null)
+- building_type : une des valeurs suivantes si déterminable — \
+{', '.join(BUILDING_TYPE_LABELS)} (sinon null)
+- year_built : l'année de construction si mentionnée (sinon null)
+- disclosure_items : les éléments pertinents pour un inspecteur. Pour chacun :
+  - category : une des valeurs suivantes, celle qui correspond le mieux au système \
+concerné — {', '.join(SECTION_LABELS)}
+  - type : "vice_connu" (problème déclaré par le vendeur), "renovation" (travaux \
+effectués), "systeme_present" (ex: type de chauffage, présence d'une piscine), \
+"garantie" (garantie active) ou "observation" (autre information pertinente)
+  - description : résumé factuel et concis en français de ce qui est déclaré
+  - year : année associée si mentionnée (sinon null)
+
+Ce document a une valeur légale — retranscris fidèlement ce qui est écrit, \
+n'invente rien et ne réinterprète pas. Si une information n'est pas présente dans \
+le document, retourne null (ou omets l'entrée) plutôt que de deviner."""
+
+DISCLOSURE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "address": {"type": ["string", "null"]},
+        "building_type": {"type": ["string", "null"]},
+        "year_built": {"type": ["integer", "null"]},
+        "disclosure_items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["vice_connu", "renovation", "systeme_present", "garantie", "observation"],
+                    },
+                    "description": {"type": "string"},
+                    "year": {"type": ["integer", "null"]},
+                },
+                "required": ["category", "type", "description"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["disclosure_items"],
+    "additionalProperties": False,
+}
+
+
+def extract_disclosure(document_bytes: bytes, media_type: str) -> dict:
+    b64 = base64.standard_b64encode(document_bytes).decode("utf-8")
+    block_type = "document" if media_type == "application/pdf" else "image"
+    response = _client.messages.create(
+        model="claude-opus-5",
+        max_tokens=4096,
+        thinking={"type": "disabled"},
+        output_config={
+            "effort": "medium",
+            "format": {"type": "json_schema", "schema": DISCLOSURE_SCHEMA},
+        },
+        system=[{"type": "text", "text": DISCLOSURE_SYSTEM_PROMPT}],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": block_type,
+                        "source": {"type": "base64", "media_type": media_type, "data": b64},
+                    },
+                    {
+                        "type": "text",
+                        "text": "Extrait les informations utiles de cette déclaration du vendeur.",
+                    },
+                ],
+            }
+        ],
+    )
+
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    if text is None:
+        raise RuntimeError("Réponse Claude sans contenu texte exploitable")
+
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Réponse Claude non exploitable : {exc}") from exc
+
+    # Le schéma JSON ne peut pas contraindre building_type à la fois nullable et
+    # limité à BUILDING_TYPE_LABELS — validé ici pour ne jamais faire remonter une
+    # valeur qui ne correspondrait à aucune option du <select> du frontend.
+    if result.get("building_type") not in BUILDING_TYPE_LABELS:
+        result["building_type"] = None
+
+    return result
+
+
+def _build_analysis_prompt(
+    section_type: str,
+    building_type: str | None = None,
+    year_built: int | None = None,
+    foundation_type: str | None = None,
+    heating_type: str | None = None,
+    has_basement: str | None = None,
+    has_crawlspace: str | None = None,
+    has_attic: str | None = None,
+    location_detail: str | None = None,
+) -> str:
+    prompt = f"Section du bâtiment inspectée : {section_label(section_type)}."
+
+    building_bits = []
+    if building_type:
+        building_bits.append(building_type_label(building_type))
+    if year_built:
+        building_bits.append(f"construit en {year_built}")
+    if foundation_type:
+        building_bits.append(f"fondation {foundation_type_label(foundation_type).lower()}")
+    if heating_type:
+        building_bits.append(f"chauffage {heating_type_label(heating_type).lower()}")
+    if has_basement == "oui":
+        building_bits.append("sous-sol présent")
+    elif has_basement == "partiel":
+        building_bits.append("sous-sol partiel")
+    if has_crawlspace == "oui":
+        building_bits.append("vide sanitaire présent")
+    if has_attic == "oui":
+        building_bits.append("comble présent")
+    if building_bits:
+        prompt += f" Bâtiment : {', '.join(building_bits)}."
+
+    if location_detail:
+        prompt += f" Localisation précise dans le bâtiment : {location_detail}."
+
+    prompt += " Analyse cette photo."
 
     context = get_context_for_section(section_type)
     if context:
@@ -88,7 +237,19 @@ def _build_analysis_prompt(section_type: str) -> str:
     return prompt
 
 
-def analyze_photo(image_bytes: bytes, media_type: str, section_type: str) -> dict:
+def analyze_photo(
+    image_bytes: bytes,
+    media_type: str,
+    section_type: str,
+    building_type: str | None = None,
+    year_built: int | None = None,
+    foundation_type: str | None = None,
+    heating_type: str | None = None,
+    has_basement: str | None = None,
+    has_crawlspace: str | None = None,
+    has_attic: str | None = None,
+    location_detail: str | None = None,
+) -> dict:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     response = _client.messages.create(
         model="claude-opus-5",
@@ -111,7 +272,17 @@ def analyze_photo(image_bytes: bytes, media_type: str, section_type: str) -> dic
                     },
                     {
                         "type": "text",
-                        "text": _build_analysis_prompt(section_type),
+                        "text": _build_analysis_prompt(
+                            section_type,
+                            building_type,
+                            year_built,
+                            foundation_type,
+                            heating_type,
+                            has_basement,
+                            has_crawlspace,
+                            has_attic,
+                            location_detail,
+                        ),
                     },
                 ],
             }
