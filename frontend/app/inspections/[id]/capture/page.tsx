@@ -15,7 +15,7 @@ import {
   type PendingPhoto,
 } from '@/lib/offline-db'
 import { DEBUG_MODE, describeError } from '@/lib/debug'
-import { isAndroid } from '@/lib/platform'
+import { isMobileDevice } from '@/lib/platform'
 import CameraCapture from '@/components/CameraCapture'
 
 // Posé dans sessionStorage juste avant d'ouvrir l'intent caméra, effacé dès
@@ -63,12 +63,15 @@ export default function CapturePage() {
   // intent caméra Android resté bloqué sans jamais déclencher `change`.
   const awaitingCaptureRef = useRef(false)
   const captureWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Caméra intégrée (getUserMedia) réservée à Android — c'est là que l'intent
-  // caméra natif ci-dessus tue le processus Chrome en arrière-plan de façon
-  // quasi systématique (cause confirmée sur le terrain). iPad/desktop restent
-  // sur le sélecteur natif, déjà stable. cameraUnavailable passe à true dès
-  // le premier échec (permission refusée, pas de caméra...) pour ne jamais
-  // redemander la permission en boucle — on retombe alors sur l'input natif.
+  // Caméra intégrée (getUserMedia) sur mobile (Android + iOS/iPadOS) : sur
+  // Android elle évite le kill de processus Chrome par l'OS pendant l'intent
+  // caméra natif (cause confirmée des pertes de photos silencieuses) ; sur
+  // iOS le bénéfice est surtout l'UX — rester sur le même écran pour prendre
+  // plusieurs photos d'affilée sans rouvrir l'app caméra à chaque fois.
+  // Desktop garde le sélecteur natif classique. cameraUnavailable passe à
+  // true dès le premier échec (permission refusée, pas de caméra...) pour ne
+  // jamais redemander la permission en boucle — on retombe alors sur l'input
+  // natif.
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraUnavailable, setCameraUnavailable] = useState(false)
   // Un seul point GPS par session de capture caméra (pas d'EXIF possible sur
@@ -388,7 +391,7 @@ export default function CapturePage() {
 
   function handleAddPhotosClick() {
     setError(null)
-    if (isAndroid() && !cameraUnavailable) {
+    if (isMobileDevice() && !cameraUnavailable) {
       logDebug('clic Ajouter des photos (caméra intégrée)')
       sessionGeoRef.current = { lat: null, lon: null }
       getCurrentPosition().then((geo) => {

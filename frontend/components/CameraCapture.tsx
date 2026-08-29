@@ -14,13 +14,15 @@ interface CameraCaptureProps {
   photoLimit: number | null
 }
 
-// Overlay plein écran avec aperçu caméra en direct (getUserMedia), pensé
-// pour l'Android uniquement (voir page.tsx) : contourne complètement l'intent
-// caméra natif dont le processus Chrome est tué par l'OS de façon quasi
-// systématique en arrière-plan, cause confirmée des pertes de photos
-// silencieuses. Reste ouvert entre les prises (flux "stay open") : l'appareil
-// ne quitte jamais le premier plan, donc aucun risque de kill de processus
-// pendant une session de capture.
+// Overlay plein écran avec aperçu caméra en direct (getUserMedia), utilisé
+// sur mobile (Android + iOS, voir page.tsx). Sur Android, contourne
+// complètement l'intent caméra natif dont le processus Chrome est tué par
+// l'OS de façon quasi systématique en arrière-plan (cause confirmée des
+// pertes de photos silencieuses). Sur iOS le bénéfice est surtout l'UX.
+// Reste ouvert entre les prises (flux "stay open") : l'appareil ne quitte
+// jamais le premier plan, donc aucun risque de kill de processus pendant une
+// session de capture, et l'inspecteur peut enchaîner plusieurs photos du même
+// emplacement sans rouvrir quoi que ce soit.
 export default function CameraCapture({
   onClose,
   onCapture,
@@ -41,9 +43,22 @@ export default function CameraCapture({
       return
     }
     let active = true
+    // Android refuse d'afficher la boîte de dialogue de permission (caméra,
+    // micro, localisation...) dès qu'une autre app peut dessiner une
+    // superposition par-dessus l'écran (bulles Messenger, overlay
+    // d'enregistreur d'écran, certains claviers) — protection anti-tapjacking
+    // du système, pas spécifique à ce site. Dans ce cas précis, getUserMedia
+    // ne rejette pas forcément : la promesse peut rester en suspens
+    // indéfiniment puisque la boîte de dialogue système n'apparaît jamais.
+    // Sans ce filet, l'overlay resterait bloqué sur "Ouverture de la
+    // caméra…" pour toujours, sans jamais basculer sur le repli natif.
+    const timeoutId = setTimeout(() => {
+      if (active) onUnavailable()
+    }, 7000)
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'environment' }, audio: false })
       .then((stream) => {
+        clearTimeout(timeoutId)
         if (!active) {
           stream.getTracks().forEach((t) => t.stop())
           return
@@ -60,10 +75,12 @@ export default function CameraCapture({
         // satisfiable... peu importe la raison exacte, le seul comportement
         // sûr est de rebasculer sur le sélecteur natif plutôt que de
         // bloquer l'inspecteur sur un écran caméra mort.
+        clearTimeout(timeoutId)
         if (active) onUnavailable()
       })
     return () => {
       active = false
+      clearTimeout(timeoutId)
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
     }
