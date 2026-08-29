@@ -389,7 +389,13 @@ export default function CapturePage() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
+          // Pas de capture="environment" : forcer l'intent caméra direct est
+          // documenté comme peu fiable sur Chrome Android 14/15 (l'intent
+          // échoue silencieusement après la première capture, sans erreur
+          // possible côté JS). Le sélecteur complet de Chrome (galerie +
+          // appareil photo en option) est plus lent d'un tap mais nettement
+          // plus fiable — confirmé stable sur iPad, le problème était
+          // spécifique à ce chemin forcé.
           multiple
           className="hidden"
           onChange={(e) => {
