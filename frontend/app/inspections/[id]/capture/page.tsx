@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useRequireAuth } from '@/lib/useRequireAuth'
 import { api } from '@/lib/api'
 import { compressImage } from '@/lib/compress-image'
-import { readPhotoExif } from '@/lib/photo-exif'
+import { getCurrentPosition, readPhotoExif } from '@/lib/photo-exif'
 import { SECTION_TYPES, sectionLabel } from '@/lib/sections'
 import {
   deletePhoto,
@@ -15,6 +15,8 @@ import {
   type PendingPhoto,
 } from '@/lib/offline-db'
 import { DEBUG_MODE, describeError } from '@/lib/debug'
+import { isAndroid } from '@/lib/platform'
+import CameraCapture from '@/components/CameraCapture'
 
 // Posé dans sessionStorage juste avant d'ouvrir l'intent caméra, effacé dès
 // que `change` se déclenche sur la même instance de page — survit donc à
@@ -61,6 +63,18 @@ export default function CapturePage() {
   // intent caméra Android resté bloqué sans jamais déclencher `change`.
   const awaitingCaptureRef = useRef(false)
   const captureWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Caméra intégrée (getUserMedia) réservée à Android — c'est là que l'intent
+  // caméra natif ci-dessus tue le processus Chrome en arrière-plan de façon
+  // quasi systématique (cause confirmée sur le terrain). iPad/desktop restent
+  // sur le sélecteur natif, déjà stable. cameraUnavailable passe à true dès
+  // le premier échec (permission refusée, pas de caméra...) pour ne jamais
+  // redemander la permission en boucle — on retombe alors sur l'input natif.
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraUnavailable, setCameraUnavailable] = useState(false)
+  // Un seul point GPS par session de capture caméra (pas d'EXIF possible sur
+  // une frame canvas) — suffisant, l'inspecteur ne change pas de pièce entre
+  // deux prises consécutives, et ça évite de redemander la géoloc à chaque photo.
+  const sessionGeoRef = useRef<{ lat: number | null; lon: number | null }>({ lat: null, lon: null })
 
   const logDebug = useCallback((msg: string) => {
     if (!DEBUG_MODE) return
@@ -328,6 +342,76 @@ export default function CapturePage() {
     }
   }
 
+  // Alimentée par CameraCapture (une frame déjà redimensionnée/encodée par
+  // captureVideoFrame) — pas d'EXIF possible ici, donc takenAt = maintenant
+  // et lat/lon viennent de sessionGeoRef plutôt que d'un fichier.
+  async function saveCapturedPhoto(blob: Blob) {
+    if (photoLimit != null && photos.length >= photoLimit) {
+      setError(`Limite de ${photoLimit} photos atteinte pour cette inspection.`)
+      return
+    }
+    try {
+      const clientPhotoId = crypto.randomUUID()
+      await savePhoto({
+        clientPhotoId,
+        inspectionId,
+        blob,
+        photoOrder: photos.length,
+        sectionType: section,
+        locationDetail: location || undefined,
+        lat: sessionGeoRef.current.lat,
+        lon: sessionGeoRef.current.lon,
+        takenAt: new Date().toISOString(),
+        uploaded: false,
+      })
+      await refreshPhotos()
+      if (navigator.onLine) syncPhotos()
+    } catch (err) {
+      setError(describeError(err, "Une photo n'a pas pu être traitée"))
+    }
+  }
+
+  // Repli natif partagé par le clic direct (iPad/desktop) et par l'échec de
+  // la caméra intégrée (Android sans permission ou sans getUserMedia) — même
+  // marqueur sessionStorage posé dans les deux cas pour détecter un
+  // rechargement pendant l'intent caméra.
+  function openNativePicker() {
+    awaitingCaptureRef.current = true
+    try {
+      sessionStorage.setItem(CAPTURE_PENDING_KEY, JSON.stringify({ inspectionId }))
+    } catch {
+      // sessionStorage indisponible — le check au montage n'aura simplement
+      // rien à détecter, pas de risque d'erreur ici
+    }
+    fileInputRef.current?.click()
+  }
+
+  function handleAddPhotosClick() {
+    setError(null)
+    if (isAndroid() && !cameraUnavailable) {
+      logDebug('clic Ajouter des photos (caméra intégrée)')
+      sessionGeoRef.current = { lat: null, lon: null }
+      getCurrentPosition().then((geo) => {
+        sessionGeoRef.current = geo
+      })
+      setCameraOpen(true)
+      return
+    }
+    logDebug('clic Ajouter des photos (sélecteur natif)')
+    openNativePicker()
+  }
+
+  // Appelé par CameraCapture une seule fois si getUserMedia est indisponible
+  // ou refusé — on ne retente plus la caméra intégrée pour cette session
+  // (éviter de redemander la permission en boucle) et on relance
+  // immédiatement le sélecteur natif comme si l'utilisateur venait de cliquer.
+  function handleCameraFallback() {
+    setCameraOpen(false)
+    setCameraUnavailable(true)
+    logDebug('caméra intégrée indisponible — repli sur le sélecteur natif')
+    openNativePicker()
+  }
+
   async function handleRemove(clientPhotoId: string) {
     const photo = photos.find((p) => p.clientPhotoId === clientPhotoId)
     if (photo?.uploaded && photo.serverId) {
@@ -527,18 +611,7 @@ export default function CapturePage() {
         />
 
         <button
-          onClick={() => {
-            setError(null)
-            awaitingCaptureRef.current = true
-            logDebug('clic Ajouter des photos')
-            try {
-              sessionStorage.setItem(CAPTURE_PENDING_KEY, JSON.stringify({ inspectionId }))
-            } catch {
-              // sessionStorage indisponible — le check au montage n'aura
-              // simplement rien à détecter, pas de risque d'erreur ici
-            }
-            fileInputRef.current?.click()
-          }}
+          onClick={handleAddPhotosClick}
           disabled={photoLimit != null && photos.length >= photoLimit}
           className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -602,6 +675,16 @@ export default function CapturePage() {
           </button>
         </div>
       </div>
+
+      {cameraOpen && (
+        <CameraCapture
+          onClose={() => setCameraOpen(false)}
+          onCapture={saveCapturedPhoto}
+          onUnavailable={handleCameraFallback}
+          photosTaken={photos.length}
+          photoLimit={photoLimit}
+        />
+      )}
     </div>
   )
 }
