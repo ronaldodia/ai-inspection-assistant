@@ -18,7 +18,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: frontend
-          image: ghcr.io/ronaldodia/ai-inspection-assistant-frontend:sha-d71b664
+          image: ghcr.io/ronaldodia/ai-inspection-assistant-frontend:sha-9bfe3b2
           ports:
             - containerPort: 3000
           resources:
