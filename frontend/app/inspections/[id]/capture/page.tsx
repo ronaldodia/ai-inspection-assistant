@@ -14,6 +14,7 @@ import {
   savePhoto,
   type PendingPhoto,
 } from '@/lib/offline-db'
+import { DEBUG_MODE, describeError } from '@/lib/debug'
 
 export default function CapturePage() {
   const token = useRequireAuth()
@@ -31,6 +32,7 @@ export default function CapturePage() {
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photoLimit, setPhotoLimit] = useState<number | null>(null)
+  const [storageInfo, setStorageInfo] = useState<string | null>(null)
 
   const refreshPhotos = useCallback(async () => {
     const stored = await getAllPhotosForInspection(inspectionId)
@@ -40,6 +42,21 @@ export default function CapturePage() {
   useEffect(() => {
     refreshPhotos()
   }, [refreshPhotos])
+
+  // Quota IndexedDB dépassé = échec silencieux de savePhoto() sans exception
+  // franche selon le navigateur — visible seulement en debug, pour éviter
+  // d'ajouter du bruit à l'écran des inspecteurs en prod.
+  useEffect(() => {
+    if (!DEBUG_MODE) return
+    navigator.storage
+      ?.estimate()
+      .then((estimate) => {
+        const usedMb = ((estimate.usage ?? 0) / 1024 / 1024).toFixed(1)
+        const quotaMb = ((estimate.quota ?? 0) / 1024 / 1024).toFixed(1)
+        setStorageInfo(`${usedMb} Mo / ${quotaMb} Mo utilisés — IndexedDB: ${'indexedDB' in window}`)
+      })
+      .catch((err) => setStorageInfo(describeError(err, 'estimation du stockage indisponible')))
+  }, [photos])
 
   useEffect(() => {
     if (!token) return
@@ -91,14 +108,14 @@ export default function CapturePage() {
         } catch (err) {
           // Isolée par photo : un échec (ex. limite atteinte) ne doit pas
           // empêcher les autres photos en attente d'être tentées.
-          firstError = firstError ?? (err instanceof Error ? err.message : 'Erreur de synchronisation')
+          firstError = firstError ?? describeError(err, 'Erreur de synchronisation')
         }
       }
       await refreshPhotos()
       if (firstError) setError(firstError)
       return firstError === null
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur de synchronisation')
+      setError(describeError(err, 'Erreur de synchronisation'))
       return false
     } finally {
       setSyncing(false)
@@ -124,44 +141,52 @@ export default function CapturePage() {
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setError(null)
-    const remaining = photoLimit != null ? Math.max(0, photoLimit - photos.length) : Infinity
-    const incoming = Array.from(files)
-    const accepted = incoming.slice(0, remaining)
-    const startOrder = photos.length
-    let index = 0
-    for (const file of accepted) {
-      try {
-        // L'EXIF doit être lu sur le fichier original — compressImage()
-        // réencode via canvas et ne préserve aucune métadonnée.
-        const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
-        const clientPhotoId = crypto.randomUUID()
-        await savePhoto({
-          clientPhotoId,
-          inspectionId,
-          blob,
-          photoOrder: startOrder + index,
-          sectionType: section,
-          locationDetail: location || undefined,
-          lat: exif.lat,
-          lon: exif.lon,
-          takenAt: exif.takenAt ?? new Date().toISOString(),
-          uploaded: false,
-        })
-        index += 1
-      } catch {
-        setError("Une photo n'a pas pu être traitée")
+    try {
+      const remaining = photoLimit != null ? Math.max(0, photoLimit - photos.length) : Infinity
+      const incoming = Array.from(files)
+      const accepted = incoming.slice(0, remaining)
+      const startOrder = photos.length
+      let index = 0
+      for (const file of accepted) {
+        try {
+          // L'EXIF doit être lu sur le fichier original — compressImage()
+          // réencode via canvas et ne préserve aucune métadonnée.
+          const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
+          const clientPhotoId = crypto.randomUUID()
+          await savePhoto({
+            clientPhotoId,
+            inspectionId,
+            blob,
+            photoOrder: startOrder + index,
+            sectionType: section,
+            locationDetail: location || undefined,
+            lat: exif.lat,
+            lon: exif.lon,
+            takenAt: exif.takenAt ?? new Date().toISOString(),
+            uploaded: false,
+          })
+          index += 1
+        } catch (err) {
+          setError(describeError(err, "Une photo n'a pas pu être traitée"))
+        }
       }
-    }
-    await refreshPhotos()
-    const rejectedCount = incoming.length - accepted.length
-    if (rejectedCount > 0) {
-      setError(
-        `Limite de ${photoLimit} photos atteinte pour cette inspection — ${rejectedCount} photo${
-          rejectedCount > 1 ? 's' : ''
-        } non ajoutée${rejectedCount > 1 ? 's' : ''}.`
-      )
-    } else if (navigator.onLine) {
-      syncPhotos()
+      await refreshPhotos()
+      const rejectedCount = incoming.length - accepted.length
+      if (rejectedCount > 0) {
+        setError(
+          `Limite de ${photoLimit} photos atteinte pour cette inspection — ${rejectedCount} photo${
+            rejectedCount > 1 ? 's' : ''
+          } non ajoutée${rejectedCount > 1 ? 's' : ''}.`
+        )
+      } else if (navigator.onLine) {
+        syncPhotos()
+      }
+    } catch (err) {
+      // Filet de sécurité : sans ça, une erreur hors de la boucle par-photo
+      // (ex. refreshPhotos() qui échoue, IndexedDB indisponible) ne remonte
+      // qu'en rejet de promesse non catché — invisible, aucune photo n'apparaît
+      // et rien ne l'explique à l'écran.
+      setError(describeError(err, "Erreur lors de l'ajout des photos"))
     }
   }
 
@@ -174,7 +199,7 @@ export default function CapturePage() {
       try {
         await api.deletePhoto(inspectionId, photo.serverId)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur lors de la suppression de la photo')
+        setError(describeError(err, 'Erreur lors de la suppression de la photo'))
         return
       }
     }
@@ -213,7 +238,7 @@ export default function CapturePage() {
       await api.queueInspection(inspectionId)
       router.push(`/inspections/${inspectionId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la mise en file d'attente")
+      setError(describeError(err, "Erreur lors de la mise en file d'attente"))
     } finally {
       setFinishing(false)
     }
@@ -237,6 +262,13 @@ export default function CapturePage() {
       </header>
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
+        {DEBUG_MODE && (
+          <div className="rounded-lg border border-purple-300 bg-purple-50 p-3 text-xs text-purple-900 font-mono space-y-1">
+            <p>🐛 DEBUG — inspectionId: {inspectionId}</p>
+            <p>{storageInfo ?? 'estimation du stockage…'}</p>
+            <p>photos locales: {photos.length} (uploadées: {photos.filter((p) => p.uploaded).length})</p>
+          </div>
+        )}
         {!online && (
           <div className="rounded-lg border border-stone-300 bg-stone-100 p-3 text-sm text-stone-700">
             📴 Hors ligne — vous pouvez continuer à ajouter des photos normalement,
@@ -326,7 +358,9 @@ export default function CapturePage() {
             // avec capture="environment") ne redéclenchent pas `change` si la
             // capture suivante ressemble à la précédente — la photo se perd
             // silencieusement, sans erreur, sans que le compteur ne bouge.
-            handleFiles(e.target.files)
+            handleFiles(e.target.files).catch((err) =>
+              setError(describeError(err, "Erreur lors de l'ajout des photos"))
+            )
             e.target.value = ''
           }}
         />
