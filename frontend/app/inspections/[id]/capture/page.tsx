@@ -57,6 +57,23 @@ export default function CapturePage() {
     refreshPhotos()
   }, [refreshPhotos])
 
+  // document.wasDiscarded (Chrome) est vrai quand le navigateur a tué puis
+  // rechargé silencieusement l'onglet pour libérer de la mémoire pendant que
+  // l'appareil photo natif était ouvert au premier plan — la capture en cours
+  // à ce moment-là se perd sans qu'aucune erreur JS ne soit possible (la page
+  // qui attendait le résultat n'existe plus). Les photos déjà enregistrées
+  // restent intactes (IndexedDB), seule la capture en vol au moment du kill
+  // disparaît — d'où l'avertissement plutôt qu'un blocage.
+  useEffect(() => {
+    if (typeof document !== 'undefined' && (document as Document & { wasDiscarded?: boolean }).wasDiscarded) {
+      setError(
+        "⚠️ Le navigateur a redémarré cette page automatiquement (mémoire faible de l'appareil). " +
+          'Vos photos déjà enregistrées sont intactes, mais la dernière capture en cours a pu être perdue — ' +
+          'vérifiez le nombre de photos ci-dessous et reprenez si besoin.'
+      )
+    }
+  }, [])
+
   // Quota IndexedDB dépassé = échec silencieux de savePhoto() sans exception
   // franche selon le navigateur — visible seulement en debug, pour éviter
   // d'ajouter du bruit à l'écran des inspecteurs en prod.
