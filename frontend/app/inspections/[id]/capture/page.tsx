@@ -199,7 +199,17 @@ export default function CapturePage() {
   }, [syncPhotos])
 
   async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return
+    if (!files || files.length === 0) {
+      // Sur Android, l'intent caméra ne renvoie pas la photo directement :
+      // Chrome doit la relire depuis l'URI qu'il a fournie à l'appli caméra
+      // (contrat ACTION_IMAGE_CAPTURE). Si cette relecture échoue (MediaStore
+      // pas encore indexé, accès stockage en retard), change se déclenche
+      // quand même mais avec une liste vide — indiscernable JS d'une
+      // annulation volontaire, donc message neutre plutôt qu'alarmant.
+      logDebug('handleFiles: liste vide (annulation ou échec de relecture caméra)')
+      setError("Aucune photo reçue — si vous veniez juste d'en prendre une, réessayez.")
+      return
+    }
     setError(null)
     try {
       const remaining = photoLimit != null ? Math.max(0, photoLimit - photos.length) : Infinity
