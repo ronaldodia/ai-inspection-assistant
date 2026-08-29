@@ -33,6 +33,20 @@ export default function CapturePage() {
   const [error, setError] = useState<string | null>(null)
   const [photoLimit, setPhotoLimit] = useState<number | null>(null)
   const [storageInfo, setStorageInfo] = useState<string | null>(null)
+  // Force le remontage complet du <input type=file> à chaque capture — sur
+  // certaines versions de Chrome Android, remettre .value = '' ne suffit pas
+  // toujours à réinitialiser l'état interne du sélecteur caméra, qui reste
+  // parfois "coincé" après un intent précédent et n'en relance aucun nouveau,
+  // sans la moindre erreur JS puisque l'événement change ne se déclenche
+  // simplement jamais.
+  const [inputKey, setInputKey] = useState(0)
+  const [debugLog, setDebugLog] = useState<string[]>([])
+
+  const logDebug = useCallback((msg: string) => {
+    if (!DEBUG_MODE) return
+    const line = `${new Date().toISOString().slice(11, 23)} — ${msg}`
+    setDebugLog((prev) => [...prev.slice(-9), line])
+  }, [])
 
   const refreshPhotos = useCallback(async () => {
     const stored = await getAllPhotosForInspection(inspectionId)
@@ -267,6 +281,13 @@ export default function CapturePage() {
             <p>🐛 DEBUG — inspectionId: {inspectionId}</p>
             <p>{storageInfo ?? 'estimation du stockage…'}</p>
             <p>photos locales: {photos.length} (uploadées: {photos.filter((p) => p.uploaded).length})</p>
+            <div className="border-t border-purple-200 pt-1 mt-1">
+              <p className="font-semibold">Derniers événements (clic / change) :</p>
+              {debugLog.length === 0 && <p className="opacity-60">aucun pour l&apos;instant</p>}
+              {debugLog.map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
           </div>
         )}
         {!online && (
@@ -347,6 +368,7 @@ export default function CapturePage() {
         </div>
 
         <input
+          key={inputKey}
           ref={fileInputRef}
           type="file"
           accept="image/*"
@@ -354,19 +376,25 @@ export default function CapturePage() {
           multiple
           className="hidden"
           onChange={(e) => {
-            // Sans ce reset, certains navigateurs (Chrome Android en particulier
-            // avec capture="environment") ne redéclenchent pas `change` si la
-            // capture suivante ressemble à la précédente — la photo se perd
-            // silencieusement, sans erreur, sans que le compteur ne bouge.
+            logDebug(`change: ${e.target.files?.length ?? 0} fichier(s)`)
             handleFiles(e.target.files).catch((err) =>
               setError(describeError(err, "Erreur lors de l'ajout des photos"))
             )
-            e.target.value = ''
+            // Remonte un input tout neuf pour la prochaine capture — sur
+            // certaines versions de Chrome Android, .value = '' ne suffit pas
+            // toujours à réarmer le sélecteur caméra, qui reste "coincé" après
+            // un intent précédent et n'en relance aucun nouveau, sans la
+            // moindre erreur JS puisque change ne se déclenche simplement
+            // jamais dans ce cas.
+            setInputKey((k) => k + 1)
           }}
         />
 
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            logDebug('clic Ajouter des photos')
+            fileInputRef.current?.click()
+          }}
           disabled={photoLimit != null && photos.length >= photoLimit}
           className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
