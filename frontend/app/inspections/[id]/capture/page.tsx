@@ -147,6 +147,30 @@ export default function CapturePage() {
     }
   }, [logDebug])
 
+  // Filet de sécurité pour un intent caméra Android qui ne déclenche jamais
+  // `change` (voir la discussion sur capture="environment") sans que l'onglet
+  // ne soit tué (auquel cas document.wasDiscarded s'en charge déjà ci-dessus).
+  // On ne démarre le compte à rebours qu'au retour dans l'onglet — jamais
+  // pendant que l'utilisateur cadre sa photo, ce qui évite les faux positifs
+  // pour une prise de photo simplement lente.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible' || !awaitingCaptureRef.current) return
+      if (captureWatchdogRef.current) clearTimeout(captureWatchdogRef.current)
+      captureWatchdogRef.current = setTimeout(() => {
+        if (!awaitingCaptureRef.current) return
+        awaitingCaptureRef.current = false
+        logDebug('watchdog: aucun change après retour dans l\'onglet')
+        setError("La capture n'a pas abouti — réessayez.")
+      }, 1500)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (captureWatchdogRef.current) clearTimeout(captureWatchdogRef.current)
+    }
+  }, [logDebug])
+
   // Quota IndexedDB dépassé = échec silencieux de savePhoto() sans exception
   // franche selon le navigateur — visible seulement en debug, pour éviter
   // d'ajouter du bruit à l'écran des inspecteurs en prod.
