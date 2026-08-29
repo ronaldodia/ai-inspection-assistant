@@ -18,11 +18,24 @@ import { DEBUG_MODE, describeError } from '@/lib/debug'
 import { isMobileDevice } from '@/lib/platform'
 import CameraCapture from '@/components/CameraCapture'
 
-// Posé dans sessionStorage juste avant d'ouvrir l'intent caméra, effacé dès
-// que `change` se déclenche sur la même instance de page — survit donc à
-// n'importe quel type de rechargement (contrairement à l'état React/refs),
-// y compris un kill de processus Android complet, pas seulement le "tab
-// discarding" interne à Chrome que document.wasDiscarded est seul à couvrir.
+// Repli historique : forcer l'ouverture de l'app caméra native via l'attribut
+// `capture` de l'input file, plutôt que de laisser un sélecteur de fichiers
+// classique. Désactivé par défaut — c'est précisément ce chemin qui tuait le
+// processus Chrome en arrière-plan sur Android (pertes de photos
+// silencieuses). Remplacé par la caméra intégrée (getUserMedia, cf.
+// CameraCapture) : demander l'autorisation caméra est normal pour ce type
+// d'app, et en cas de refus on affiche "Téléverser des photos" plutôt que de
+// retomber en douce sur cet intent. Gardé derrière ce flag pour un rollback
+// rapide si getUserMedia s'avère trop contraignant sur le terrain.
+const ENABLE_NATIVE_CAMERA_INTENT = false
+
+// Posé dans sessionStorage juste avant d'ouvrir le sélecteur de fichiers,
+// effacé dès que `change` se déclenche sur la même instance de page — survit
+// donc à n'importe quel type de rechargement (contrairement à l'état
+// React/refs), y compris un kill de processus Android complet, pas seulement
+// le "tab discarding" interne à Chrome que document.wasDiscarded est seul à
+// couvrir. Utile surtout si ENABLE_NATIVE_CAMERA_INTENT est un jour remis à
+// true ; harmless sinon.
 const CAPTURE_PENDING_KEY = 'inspectra:capture-pending'
 
 function clearCapturePendingMarker() {
@@ -58,22 +71,31 @@ export default function CapturePage() {
   // simplement jamais.
   const [inputKey, setInputKey] = useState(0)
   const [debugLog, setDebugLog] = useState<string[]>([])
-  // Vrai entre le clic sur "Ajouter des photos" et le prochain `change` —
-  // sert au filet de sécurité ci-dessous (visibilitychange) qui détecte un
-  // intent caméra Android resté bloqué sans jamais déclencher `change`.
+  // Vrai entre le clic sur "Téléverser des photos" et le prochain `change` —
+  // sert au filet de sécurité ci-dessous (visibilitychange), surtout utile
+  // si ENABLE_NATIVE_CAMERA_INTENT est remis à true.
   const awaitingCaptureRef = useRef(false)
   const captureWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Caméra intégrée (getUserMedia) sur mobile (Android + iOS/iPadOS) : sur
-  // Android elle évite le kill de processus Chrome par l'OS pendant l'intent
-  // caméra natif (cause confirmée des pertes de photos silencieuses) ; sur
-  // iOS le bénéfice est surtout l'UX — rester sur le même écran pour prendre
-  // plusieurs photos d'affilée sans rouvrir l'app caméra à chaque fois.
-  // Desktop garde le sélecteur natif classique. cameraUnavailable passe à
-  // true dès le premier échec (permission refusée, pas de caméra...) pour ne
-  // jamais redemander la permission en boucle — on retombe alors sur l'input
-  // natif.
+  // Caméra intégrée (getUserMedia), seule façon de prendre une photo en
+  // direct désormais (voir ENABLE_NATIVE_CAMERA_INTENT ci-dessus). Sur
+  // Android elle évite en plus le kill de processus Chrome par l'OS pendant
+  // l'intent caméra natif (cause confirmée des pertes de photos silencieuses).
+  // cameraUnavailable passe à true dès le premier échec (permission refusée,
+  // pas de caméra, timeout...) pour ne jamais redemander la permission en
+  // boucle — le bouton "Prendre une photo" reste alors grisé pour le reste de
+  // la session, "Téléverser des photos" restant la solution de repli visible
+  // et toujours disponible.
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraUnavailable, setCameraUnavailable] = useState(false)
+  // Faux par défaut (y compris pendant le rendu serveur) puis mis à jour au
+  // montage — navigator n'existe pas côté serveur, et "Prendre une photo" ne
+  // doit tout simplement pas exister sur desktop (pas de caméra arrière,
+  // demander la permission caméra/géoloc pour ouvrir une webcam n'a pas de
+  // sens ici) plutôt que d'être présent et grisé.
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    setIsMobile(isMobileDevice())
+  }, [])
   // Un seul point GPS par session de capture caméra (pas d'EXIF possible sur
   // une frame canvas) — suffisant, l'inspecteur ne change pas de pièce entre
   // deux prises consécutives, et ça évite de redemander la géoloc à chaque photo.
@@ -95,9 +117,10 @@ export default function CapturePage() {
   }, [refreshPhotos])
 
   // Deux signaux complémentaires pour détecter qu'on revient d'un rechargement
-  // complet survenu pendant que l'appareil photo natif avait le focus :
+  // complet survenu pendant que l'appareil photo natif avait le focus (surtout
+  // pertinent si ENABLE_NATIVE_CAMERA_INTENT est remis à true) :
   //
-  // 1. Le marqueur sessionStorage posé au clic sur "Ajouter des photos" et
+  // 1. Le marqueur sessionStorage posé au clic sur "Téléverser des photos" et
   //    jamais effacé par le `change` correspondant — la seule preuve fiable
   //    sur Android, où ouvrir l'intent caméra tue quasi systématiquement tout
   //    le processus Chrome (pas juste "l'onglet mis en veille"), et où cette
@@ -374,11 +397,13 @@ export default function CapturePage() {
     }
   }
 
-  // Repli natif partagé par le clic direct (iPad/desktop) et par l'échec de
-  // la caméra intégrée (Android sans permission ou sans getUserMedia) — même
-  // marqueur sessionStorage posé dans les deux cas pour détecter un
-  // rechargement pendant l'intent caméra.
-  function openNativePicker() {
+  // Sélecteur de fichiers classique ("Téléverser des photos") — toujours
+  // disponible, indépendamment de l'état de la permission caméra. N'ouvre
+  // l'app caméra native que si ENABLE_NATIVE_CAMERA_INTENT est remis à true ;
+  // sinon c'est un simple accès à la pellicule/aux fichiers existants.
+  function handleUploadClick() {
+    setError(null)
+    logDebug('clic Téléverser des photos')
     awaitingCaptureRef.current = true
     try {
       sessionStorage.setItem(CAPTURE_PENDING_KEY, JSON.stringify({ inspectionId }))
@@ -389,30 +414,27 @@ export default function CapturePage() {
     fileInputRef.current?.click()
   }
 
-  function handleAddPhotosClick() {
+  function handleTakePhotoClick() {
     setError(null)
-    if (isMobileDevice() && !cameraUnavailable) {
-      logDebug('clic Ajouter des photos (caméra intégrée)')
-      sessionGeoRef.current = { lat: null, lon: null }
-      getCurrentPosition().then((geo) => {
-        sessionGeoRef.current = geo
-      })
-      setCameraOpen(true)
-      return
-    }
-    logDebug('clic Ajouter des photos (sélecteur natif)')
-    openNativePicker()
+    logDebug('clic Prendre une photo')
+    sessionGeoRef.current = { lat: null, lon: null }
+    getCurrentPosition().then((geo) => {
+      sessionGeoRef.current = geo
+    })
+    setCameraOpen(true)
   }
 
   // Appelé par CameraCapture une seule fois si getUserMedia est indisponible
-  // ou refusé — on ne retente plus la caméra intégrée pour cette session
-  // (éviter de redemander la permission en boucle) et on relance
-  // immédiatement le sélecteur natif comme si l'utilisateur venait de cliquer.
-  function handleCameraFallback() {
+  // ou refusé (permission refusée, pas de caméra, timeout de la boîte de
+  // dialogue système...). Contrairement à avant, on ne retombe plus en douce
+  // sur l'app caméra native : demander l'autorisation caméra est un
+  // comportement normal pour ce type d'app, donc un refus doit rester
+  // visible — le bouton "Prendre une photo" se grise, "Téléverser des
+  // photos" reste l'alternative explicite.
+  function handleCameraUnavailable() {
     setCameraOpen(false)
     setCameraUnavailable(true)
-    logDebug('caméra intégrée indisponible — repli sur le sélecteur natif')
-    openNativePicker()
+    logDebug('caméra intégrée indisponible ou permission refusée')
   }
 
   async function handleRemove(clientPhotoId: string) {
@@ -583,14 +605,11 @@ export default function CapturePage() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          // Retiré puis remis : sans capture, le nouveau "Photo Picker"
-          // système d'Android 14+ n'a tout simplement pas d'option appareil
-          // photo (seulement la pellicule existante) — pire que l'intent
-          // caméra parfois flaky, puisque ça revient à ne plus jamais
-          // pouvoir prendre une nouvelle photo sur Android. Le vrai correctif
-          // durable est une capture caméra intégrée à la page (getUserMedia),
-          // qui évite complètement ce choix — voir discussion en cours.
-          capture="environment"
+          // capture="environment" seulement si ENABLE_NATIVE_CAMERA_INTENT
+          // est remis à true (voir ce flag en tête de fichier) — par défaut
+          // ce champ est un simple sélecteur de fichiers/pellicule, plus
+          // question de forcer l'app caméra native depuis ici.
+          {...(ENABLE_NATIVE_CAMERA_INTENT ? { capture: 'environment' as const } : {})}
           multiple
           className="hidden"
           onChange={(e) => {
@@ -613,15 +632,45 @@ export default function CapturePage() {
           }}
         />
 
-        <button
-          onClick={handleAddPhotosClick}
-          disabled={photoLimit != null && photos.length >= photoLimit}
-          className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {photoLimit != null && photos.length >= photoLimit
-            ? `Limite de ${photoLimit} photos atteinte`
-            : '📷 Ajouter des photos'}
-        </button>
+        {(() => {
+          const limitReached = photoLimit != null && photos.length >= photoLimit
+          return (
+            <div className="space-y-2">
+              {isMobile && (
+                <>
+                  <button
+                    onClick={handleTakePhotoClick}
+                    disabled={limitReached || cameraUnavailable}
+                    className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {limitReached
+                      ? `Limite de ${photoLimit} photos atteinte`
+                      : cameraUnavailable
+                        ? '📷 Caméra indisponible — voir ci-dessous'
+                        : '📷 Prendre une photo'}
+                  </button>
+                  {cameraUnavailable && (
+                    <p className="text-xs text-stone-500">
+                      Autorisation caméra refusée ou indisponible sur cet appareil — utilisez «
+                      Téléverser des photos » pour ajouter des photos déjà prises.
+                    </p>
+                  )}
+                </>
+              )}
+              <button
+                onClick={handleUploadClick}
+                disabled={limitReached}
+                className={
+                  isMobile
+                    ? 'w-full rounded-lg border border-stone-300 bg-white text-stone-700 py-3 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed'
+                    : 'w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed'
+                }
+              >
+                {limitReached ? `Limite de ${photoLimit} photos atteinte` : '📁 Téléverser des photos'}
+              </button>
+            </div>
+          )
+        })()}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -683,7 +732,7 @@ export default function CapturePage() {
         <CameraCapture
           onClose={() => setCameraOpen(false)}
           onCapture={saveCapturedPhoto}
-          onUnavailable={handleCameraFallback}
+          onUnavailable={handleCameraUnavailable}
           photosTaken={photos.length}
           photoLimit={photoLimit}
         />
