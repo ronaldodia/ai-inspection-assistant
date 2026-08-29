@@ -16,6 +16,21 @@ import {
 } from '@/lib/offline-db'
 import { DEBUG_MODE, describeError } from '@/lib/debug'
 
+// Posé dans sessionStorage juste avant d'ouvrir l'intent caméra, effacé dès
+// que `change` se déclenche sur la même instance de page — survit donc à
+// n'importe quel type de rechargement (contrairement à l'état React/refs),
+// y compris un kill de processus Android complet, pas seulement le "tab
+// discarding" interne à Chrome que document.wasDiscarded est seul à couvrir.
+const CAPTURE_PENDING_KEY = 'inspectra:capture-pending'
+
+function clearCapturePendingMarker() {
+  try {
+    sessionStorage.removeItem(CAPTURE_PENDING_KEY)
+  } catch {
+    // sessionStorage indisponible (navigation privée, quota) — tant pis
+  }
+}
+
 export default function CapturePage() {
   const token = useRequireAuth()
   const params = useParams<{ id: string }>()
@@ -62,22 +77,51 @@ export default function CapturePage() {
     refreshPhotos()
   }, [refreshPhotos])
 
-  // document.wasDiscarded (Chrome) est vrai quand le navigateur a tué puis
-  // rechargé silencieusement l'onglet pour libérer de la mémoire pendant que
-  // l'appareil photo natif était ouvert au premier plan — la capture en cours
-  // à ce moment-là se perd sans qu'aucune erreur JS ne soit possible (la page
-  // qui attendait le résultat n'existe plus). Les photos déjà enregistrées
-  // restent intactes (IndexedDB), seule la capture en vol au moment du kill
-  // disparaît — d'où l'avertissement plutôt qu'un blocage.
+  // Deux signaux complémentaires pour détecter qu'on revient d'un rechargement
+  // complet survenu pendant que l'appareil photo natif avait le focus :
+  //
+  // 1. Le marqueur sessionStorage posé au clic sur "Ajouter des photos" et
+  //    jamais effacé par le `change` correspondant — la seule preuve fiable
+  //    sur Android, où ouvrir l'intent caméra tue quasi systématiquement tout
+  //    le processus Chrome (pas juste "l'onglet mis en veille"), et où cette
+  //    page-ci est alors détruite puis recréée de zéro, sans que `change` ne
+  //    puisse jamais se déclencher sur l'ancienne instance. sessionStorage
+  //    survit à ce genre de rechargement, contrairement à l'état React/refs.
+  // 2. document.wasDiscarded (Chrome), qui ne couvre que le "tab discarding"
+  //    interne à Chrome (documenté pour desktop, support Android incertain)
+  //    — gardé en repli pour les cas hors capture où il se déclenche malgré
+  //    tout.
+  //
+  // Dans les deux cas : les photos déjà enregistrées restent intactes
+  // (IndexedDB), seule la capture en vol au moment du rechargement disparaît
+  // — d'où l'avertissement plutôt qu'un blocage.
   useEffect(() => {
-    if (typeof document !== 'undefined' && (document as Document & { wasDiscarded?: boolean }).wasDiscarded) {
+    let capturePending: { inspectionId: string } | null = null
+    try {
+      const raw = sessionStorage.getItem(CAPTURE_PENDING_KEY)
+      if (raw) capturePending = JSON.parse(raw)
+    } catch {
+      // sessionStorage indisponible ou marqueur corrompu — ignoré, pas grave
+    }
+    const discarded =
+      typeof document !== 'undefined' && (document as Document & { wasDiscarded?: boolean }).wasDiscarded
+
+    if (capturePending && capturePending.inspectionId === inspectionId) {
+      logDebug('sessionStorage: capture en attente jamais résolue — page relancée pendant la prise de vue')
+      setError(
+        "⚠️ L'application a été relancée pendant la prise de photo (l'appareil photo a demandé trop de mémoire). " +
+          'Cette capture est perdue — vos photos déjà enregistrées sont intactes, reprenez simplement la dernière.'
+      )
+    } else if (discarded) {
+      logDebug('document.wasDiscarded = true')
       setError(
         "⚠️ Le navigateur a redémarré cette page automatiquement (mémoire faible de l'appareil). " +
           'Vos photos déjà enregistrées sont intactes, mais la dernière capture en cours a pu être perdue — ' +
           'vérifiez le nombre de photos ci-dessous et reprenez si besoin.'
       )
     }
-  }, [])
+    clearCapturePendingMarker()
+  }, [inspectionId, logDebug])
 
   // Filet de sécurité pour un intent caméra Android qui ne déclenche jamais
   // `change` (voir la discussion sur capture="environment") sans que l'onglet
@@ -441,6 +485,9 @@ export default function CapturePage() {
           onChange={(e) => {
             awaitingCaptureRef.current = false
             if (captureWatchdogRef.current) clearTimeout(captureWatchdogRef.current)
+            // La page a bien survécu jusqu'ici (ce handler s'exécute) : quel
+            // que soit le résultat, le rechargement redouté n'a pas eu lieu.
+            clearCapturePendingMarker()
             logDebug(`change: ${e.target.files?.length ?? 0} fichier(s)`)
             handleFiles(e.target.files).catch((err) =>
               setError(describeError(err, "Erreur lors de l'ajout des photos"))
@@ -460,6 +507,12 @@ export default function CapturePage() {
             setError(null)
             awaitingCaptureRef.current = true
             logDebug('clic Ajouter des photos')
+            try {
+              sessionStorage.setItem(CAPTURE_PENDING_KEY, JSON.stringify({ inspectionId }))
+            } catch {
+              // sessionStorage indisponible — le check au montage n'aura
+              // simplement rien à détecter, pas de risque d'erreur ici
+            }
             fileInputRef.current?.click()
           }}
           disabled={photoLimit != null && photos.length >= photoLimit}
