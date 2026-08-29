@@ -16,8 +16,11 @@ declare const self: ServiceWorkerGlobalScope;
 // jamais une réponse API périmée (limite de photos, statut d'inspection).
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
-  clientsClaim: true,
+  // Ni skipWaiting ni clientsClaim : un nouveau déploiement ne doit jamais
+  // reprendre le contrôle d'un onglet déjà ouvert en pleine session de
+  // capture — le nouveau service worker attend que l'utilisateur ferme et
+  // rouvre l'app avant de prendre effet, même si ça retarde un peu la
+  // propagation d'un correctif.
   navigationPreload: true,
   runtimeCaching: defaultCache,
   fallbacks: {
