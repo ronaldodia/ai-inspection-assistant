@@ -14,6 +14,22 @@ import {
   savePhoto,
   type PendingPhoto,
 } from '@/lib/offline-db'
+import { DEBUG_MODE, describeError } from '@/lib/debug'
+
+// Posé dans sessionStorage juste avant d'ouvrir l'intent caméra, effacé dès
+// que `change` se déclenche sur la même instance de page — survit donc à
+// n'importe quel type de rechargement (contrairement à l'état React/refs),
+// y compris un kill de processus Android complet, pas seulement le "tab
+// discarding" interne à Chrome que document.wasDiscarded est seul à couvrir.
+const CAPTURE_PENDING_KEY = 'inspectra:capture-pending'
+
+function clearCapturePendingMarker() {
+  try {
+    sessionStorage.removeItem(CAPTURE_PENDING_KEY)
+  } catch {
+    // sessionStorage indisponible (navigation privée, quota) — tant pis
+  }
+}
 
 export default function CapturePage() {
   const token = useRequireAuth()
@@ -31,6 +47,26 @@ export default function CapturePage() {
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photoLimit, setPhotoLimit] = useState<number | null>(null)
+  const [storageInfo, setStorageInfo] = useState<string | null>(null)
+  // Force le remontage complet du <input type=file> à chaque capture — sur
+  // certaines versions de Chrome Android, remettre .value = '' ne suffit pas
+  // toujours à réinitialiser l'état interne du sélecteur caméra, qui reste
+  // parfois "coincé" après un intent précédent et n'en relance aucun nouveau,
+  // sans la moindre erreur JS puisque l'événement change ne se déclenche
+  // simplement jamais.
+  const [inputKey, setInputKey] = useState(0)
+  const [debugLog, setDebugLog] = useState<string[]>([])
+  // Vrai entre le clic sur "Ajouter des photos" et le prochain `change` —
+  // sert au filet de sécurité ci-dessous (visibilitychange) qui détecte un
+  // intent caméra Android resté bloqué sans jamais déclencher `change`.
+  const awaitingCaptureRef = useRef(false)
+  const captureWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const logDebug = useCallback((msg: string) => {
+    if (!DEBUG_MODE) return
+    const line = `${new Date().toISOString().slice(11, 23)} — ${msg}`
+    setDebugLog((prev) => [...prev.slice(-9), line])
+  }, [])
 
   const refreshPhotos = useCallback(async () => {
     const stored = await getAllPhotosForInspection(inspectionId)
@@ -40,6 +76,91 @@ export default function CapturePage() {
   useEffect(() => {
     refreshPhotos()
   }, [refreshPhotos])
+
+  // Deux signaux complémentaires pour détecter qu'on revient d'un rechargement
+  // complet survenu pendant que l'appareil photo natif avait le focus :
+  //
+  // 1. Le marqueur sessionStorage posé au clic sur "Ajouter des photos" et
+  //    jamais effacé par le `change` correspondant — la seule preuve fiable
+  //    sur Android, où ouvrir l'intent caméra tue quasi systématiquement tout
+  //    le processus Chrome (pas juste "l'onglet mis en veille"), et où cette
+  //    page-ci est alors détruite puis recréée de zéro, sans que `change` ne
+  //    puisse jamais se déclencher sur l'ancienne instance. sessionStorage
+  //    survit à ce genre de rechargement, contrairement à l'état React/refs.
+  // 2. document.wasDiscarded (Chrome), qui ne couvre que le "tab discarding"
+  //    interne à Chrome (documenté pour desktop, support Android incertain)
+  //    — gardé en repli pour les cas hors capture où il se déclenche malgré
+  //    tout.
+  //
+  // Dans les deux cas : les photos déjà enregistrées restent intactes
+  // (IndexedDB), seule la capture en vol au moment du rechargement disparaît
+  // — d'où l'avertissement plutôt qu'un blocage.
+  useEffect(() => {
+    let capturePending: { inspectionId: string } | null = null
+    try {
+      const raw = sessionStorage.getItem(CAPTURE_PENDING_KEY)
+      if (raw) capturePending = JSON.parse(raw)
+    } catch {
+      // sessionStorage indisponible ou marqueur corrompu — ignoré, pas grave
+    }
+    const discarded =
+      typeof document !== 'undefined' && (document as Document & { wasDiscarded?: boolean }).wasDiscarded
+
+    if (capturePending && capturePending.inspectionId === inspectionId) {
+      logDebug('sessionStorage: capture en attente jamais résolue — page relancée pendant la prise de vue')
+      setError(
+        "⚠️ L'application a été relancée pendant la prise de photo (l'appareil photo a demandé trop de mémoire). " +
+          'Cette capture est perdue — vos photos déjà enregistrées sont intactes, reprenez simplement la dernière.'
+      )
+    } else if (discarded) {
+      logDebug('document.wasDiscarded = true')
+      setError(
+        "⚠️ Le navigateur a redémarré cette page automatiquement (mémoire faible de l'appareil). " +
+          'Vos photos déjà enregistrées sont intactes, mais la dernière capture en cours a pu être perdue — ' +
+          'vérifiez le nombre de photos ci-dessous et reprenez si besoin.'
+      )
+    }
+    clearCapturePendingMarker()
+  }, [inspectionId, logDebug])
+
+  // Filet de sécurité pour un intent caméra Android qui ne déclenche jamais
+  // `change` (voir la discussion sur capture="environment") sans que l'onglet
+  // ne soit tué (auquel cas document.wasDiscarded s'en charge déjà ci-dessus).
+  // On ne démarre le compte à rebours qu'au retour dans l'onglet — jamais
+  // pendant que l'utilisateur cadre sa photo, ce qui évite les faux positifs
+  // pour une prise de photo simplement lente.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible' || !awaitingCaptureRef.current) return
+      if (captureWatchdogRef.current) clearTimeout(captureWatchdogRef.current)
+      captureWatchdogRef.current = setTimeout(() => {
+        if (!awaitingCaptureRef.current) return
+        awaitingCaptureRef.current = false
+        logDebug('watchdog: aucun change après retour dans l\'onglet')
+        setError("La capture n'a pas abouti — réessayez.")
+      }, 1500)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (captureWatchdogRef.current) clearTimeout(captureWatchdogRef.current)
+    }
+  }, [logDebug])
+
+  // Quota IndexedDB dépassé = échec silencieux de savePhoto() sans exception
+  // franche selon le navigateur — visible seulement en debug, pour éviter
+  // d'ajouter du bruit à l'écran des inspecteurs en prod.
+  useEffect(() => {
+    if (!DEBUG_MODE) return
+    navigator.storage
+      ?.estimate()
+      .then((estimate) => {
+        const usedMb = ((estimate.usage ?? 0) / 1024 / 1024).toFixed(1)
+        const quotaMb = ((estimate.quota ?? 0) / 1024 / 1024).toFixed(1)
+        setStorageInfo(`${usedMb} Mo / ${quotaMb} Mo utilisés — IndexedDB: ${'indexedDB' in window}`)
+      })
+      .catch((err) => setStorageInfo(describeError(err, 'estimation du stockage indisponible')))
+  }, [photos])
 
   useEffect(() => {
     if (!token) return
@@ -91,14 +212,14 @@ export default function CapturePage() {
         } catch (err) {
           // Isolée par photo : un échec (ex. limite atteinte) ne doit pas
           // empêcher les autres photos en attente d'être tentées.
-          firstError = firstError ?? (err instanceof Error ? err.message : 'Erreur de synchronisation')
+          firstError = firstError ?? describeError(err, 'Erreur de synchronisation')
         }
       }
       await refreshPhotos()
       if (firstError) setError(firstError)
       return firstError === null
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur de synchronisation')
+      setError(describeError(err, 'Erreur de synchronisation'))
       return false
     } finally {
       setSyncing(false)
@@ -122,46 +243,64 @@ export default function CapturePage() {
   }, [syncPhotos])
 
   async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return
-    setError(null)
-    const remaining = photoLimit != null ? Math.max(0, photoLimit - photos.length) : Infinity
-    const incoming = Array.from(files)
-    const accepted = incoming.slice(0, remaining)
-    const startOrder = photos.length
-    let index = 0
-    for (const file of accepted) {
-      try {
-        // L'EXIF doit être lu sur le fichier original — compressImage()
-        // réencode via canvas et ne préserve aucune métadonnée.
-        const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
-        const clientPhotoId = crypto.randomUUID()
-        await savePhoto({
-          clientPhotoId,
-          inspectionId,
-          blob,
-          photoOrder: startOrder + index,
-          sectionType: section,
-          locationDetail: location || undefined,
-          lat: exif.lat,
-          lon: exif.lon,
-          takenAt: exif.takenAt ?? new Date().toISOString(),
-          uploaded: false,
-        })
-        index += 1
-      } catch {
-        setError("Une photo n'a pas pu être traitée")
-      }
+    if (!files || files.length === 0) {
+      // Sur Android, l'intent caméra ne renvoie pas la photo directement :
+      // Chrome doit la relire depuis l'URI qu'il a fournie à l'appli caméra
+      // (contrat ACTION_IMAGE_CAPTURE). Si cette relecture échoue (MediaStore
+      // pas encore indexé, accès stockage en retard), change se déclenche
+      // quand même mais avec une liste vide — indiscernable JS d'une
+      // annulation volontaire, donc message neutre plutôt qu'alarmant.
+      logDebug('handleFiles: liste vide (annulation ou échec de relecture caméra)')
+      setError("Aucune photo reçue — si vous veniez juste d'en prendre une, réessayez.")
+      return
     }
-    await refreshPhotos()
-    const rejectedCount = incoming.length - accepted.length
-    if (rejectedCount > 0) {
-      setError(
-        `Limite de ${photoLimit} photos atteinte pour cette inspection — ${rejectedCount} photo${
-          rejectedCount > 1 ? 's' : ''
-        } non ajoutée${rejectedCount > 1 ? 's' : ''}.`
-      )
-    } else if (navigator.onLine) {
-      syncPhotos()
+    setError(null)
+    try {
+      const remaining = photoLimit != null ? Math.max(0, photoLimit - photos.length) : Infinity
+      const incoming = Array.from(files)
+      const accepted = incoming.slice(0, remaining)
+      const startOrder = photos.length
+      let index = 0
+      for (const file of accepted) {
+        try {
+          // L'EXIF doit être lu sur le fichier original — compressImage()
+          // réencode via canvas et ne préserve aucune métadonnée.
+          const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
+          const clientPhotoId = crypto.randomUUID()
+          await savePhoto({
+            clientPhotoId,
+            inspectionId,
+            blob,
+            photoOrder: startOrder + index,
+            sectionType: section,
+            locationDetail: location || undefined,
+            lat: exif.lat,
+            lon: exif.lon,
+            takenAt: exif.takenAt ?? new Date().toISOString(),
+            uploaded: false,
+          })
+          index += 1
+        } catch (err) {
+          setError(describeError(err, "Une photo n'a pas pu être traitée"))
+        }
+      }
+      await refreshPhotos()
+      const rejectedCount = incoming.length - accepted.length
+      if (rejectedCount > 0) {
+        setError(
+          `Limite de ${photoLimit} photos atteinte pour cette inspection — ${rejectedCount} photo${
+            rejectedCount > 1 ? 's' : ''
+          } non ajoutée${rejectedCount > 1 ? 's' : ''}.`
+        )
+      } else if (navigator.onLine) {
+        syncPhotos()
+      }
+    } catch (err) {
+      // Filet de sécurité : sans ça, une erreur hors de la boucle par-photo
+      // (ex. refreshPhotos() qui échoue, IndexedDB indisponible) ne remonte
+      // qu'en rejet de promesse non catché — invisible, aucune photo n'apparaît
+      // et rien ne l'explique à l'écran.
+      setError(describeError(err, "Erreur lors de l'ajout des photos"))
     }
   }
 
@@ -174,7 +313,7 @@ export default function CapturePage() {
       try {
         await api.deletePhoto(inspectionId, photo.serverId)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur lors de la suppression de la photo')
+        setError(describeError(err, 'Erreur lors de la suppression de la photo'))
         return
       }
     }
@@ -213,7 +352,7 @@ export default function CapturePage() {
       await api.queueInspection(inspectionId)
       router.push(`/inspections/${inspectionId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la mise en file d'attente")
+      setError(describeError(err, "Erreur lors de la mise en file d'attente"))
     } finally {
       setFinishing(false)
     }
@@ -237,6 +376,20 @@ export default function CapturePage() {
       </header>
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
+        {DEBUG_MODE && (
+          <div className="rounded-lg border border-purple-300 bg-purple-50 p-3 text-xs text-purple-900 font-mono space-y-1">
+            <p>🐛 DEBUG — inspectionId: {inspectionId}</p>
+            <p>{storageInfo ?? 'estimation du stockage…'}</p>
+            <p>photos locales: {photos.length} (uploadées: {photos.filter((p) => p.uploaded).length})</p>
+            <div className="border-t border-purple-200 pt-1 mt-1">
+              <p className="font-semibold">Derniers événements (clic / change) :</p>
+              {debugLog.length === 0 && <p className="opacity-60">aucun pour l&apos;instant</p>}
+              {debugLog.map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+          </div>
+        )}
         {!online && (
           <div className="rounded-lg border border-stone-300 bg-stone-100 p-3 text-sm text-stone-700">
             📴 Hors ligne — vous pouvez continuer à ajouter des photos normalement,
@@ -315,17 +468,53 @@ export default function CapturePage() {
         </div>
 
         <input
+          key={inputKey}
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          // Retiré puis remis : sans capture, le nouveau "Photo Picker"
+          // système d'Android 14+ n'a tout simplement pas d'option appareil
+          // photo (seulement la pellicule existante) — pire que l'intent
+          // caméra parfois flaky, puisque ça revient à ne plus jamais
+          // pouvoir prendre une nouvelle photo sur Android. Le vrai correctif
+          // durable est une capture caméra intégrée à la page (getUserMedia),
+          // qui évite complètement ce choix — voir discussion en cours.
           capture="environment"
           multiple
           className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => {
+            awaitingCaptureRef.current = false
+            if (captureWatchdogRef.current) clearTimeout(captureWatchdogRef.current)
+            // La page a bien survécu jusqu'ici (ce handler s'exécute) : quel
+            // que soit le résultat, le rechargement redouté n'a pas eu lieu.
+            clearCapturePendingMarker()
+            logDebug(`change: ${e.target.files?.length ?? 0} fichier(s)`)
+            handleFiles(e.target.files).catch((err) =>
+              setError(describeError(err, "Erreur lors de l'ajout des photos"))
+            )
+            // Remonte un input tout neuf pour la prochaine capture — sur
+            // certaines versions de Chrome Android, .value = '' ne suffit pas
+            // toujours à réarmer le sélecteur caméra, qui reste "coincé" après
+            // un intent précédent et n'en relance aucun nouveau, sans la
+            // moindre erreur JS puisque change ne se déclenche simplement
+            // jamais dans ce cas.
+            setInputKey((k) => k + 1)
+          }}
         />
 
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            setError(null)
+            awaitingCaptureRef.current = true
+            logDebug('clic Ajouter des photos')
+            try {
+              sessionStorage.setItem(CAPTURE_PENDING_KEY, JSON.stringify({ inspectionId }))
+            } catch {
+              // sessionStorage indisponible — le check au montage n'aura
+              // simplement rien à détecter, pas de risque d'erreur ici
+            }
+            fileInputRef.current?.click()
+          }}
           disabled={photoLimit != null && photos.length >= photoLimit}
           className="w-full rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 py-8 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >

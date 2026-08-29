@@ -144,6 +144,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.inspectra.dev.evoluops.com' }}
+            NEXT_PUBLIC_DEBUG=${{ github.ref == 'refs/heads/dev' && 'true' || 'false' }}
           tags: ${{ env.FRONTEND_IMAGE }}:${{ steps.vars.outputs.tag }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
