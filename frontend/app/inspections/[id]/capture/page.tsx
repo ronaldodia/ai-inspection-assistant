@@ -389,13 +389,14 @@ export default function CapturePage() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          // Pas de capture="environment" : forcer l'intent caméra direct est
-          // documenté comme peu fiable sur Chrome Android 14/15 (l'intent
-          // échoue silencieusement après la première capture, sans erreur
-          // possible côté JS). Le sélecteur complet de Chrome (galerie +
-          // appareil photo en option) est plus lent d'un tap mais nettement
-          // plus fiable — confirmé stable sur iPad, le problème était
-          // spécifique à ce chemin forcé.
+          // Retiré puis remis : sans capture, le nouveau "Photo Picker"
+          // système d'Android 14+ n'a tout simplement pas d'option appareil
+          // photo (seulement la pellicule existante) — pire que l'intent
+          // caméra parfois flaky, puisque ça revient à ne plus jamais
+          // pouvoir prendre une nouvelle photo sur Android. Le vrai correctif
+          // durable est une capture caméra intégrée à la page (getUserMedia),
+          // qui évite complètement ce choix — voir discussion en cours.
+          capture="environment"
           multiple
           className="hidden"
           onChange={(e) => {
