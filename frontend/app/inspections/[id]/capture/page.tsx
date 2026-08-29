@@ -321,7 +321,14 @@ export default function CapturePage() {
           capture="environment"
           multiple
           className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => {
+            // Sans ce reset, certains navigateurs (Chrome Android en particulier
+            // avec capture="environment") ne redéclenchent pas `change` si la
+            // capture suivante ressemble à la précédente — la photo se perd
+            // silencieusement, sans erreur, sans que le compteur ne bouge.
+            handleFiles(e.target.files)
+            e.target.value = ''
+          }}
         />
 
         <button
