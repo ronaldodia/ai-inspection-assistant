@@ -18,7 +18,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: worker
-          image: ghcr.io/ronaldodia/ai-inspection-assistant-backend:sha-dddd957
+          image: ghcr.io/ronaldodia/ai-inspection-assistant-backend:sha-cc97275
           command: ["python", "-m", "worker.worker"]
           envFrom:
             - secretRef:
