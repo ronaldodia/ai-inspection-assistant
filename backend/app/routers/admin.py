@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 INSPECTOR_FIELDS = """
     id, email, full_name, certification, role, is_active,
-    max_inspections, max_photos_per_inspection, created_at
+    max_inspections, max_photos_per_inspection, must_change_password, created_at
 """
 
 
@@ -41,8 +41,11 @@ def create_inspector(
     try:
         row = conn.execute(
             f"""
-            INSERT INTO users (email, password_hash, full_name, certification, max_inspections, max_photos_per_inspection)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO users (
+                email, password_hash, full_name, certification,
+                max_inspections, max_photos_per_inspection, must_change_password
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, true)
             RETURNING {INSPECTOR_FIELDS}
             """,
             (
@@ -94,7 +97,7 @@ def reset_inspector_password(
     conn: psycopg.Connection = Depends(get_conn),
 ):
     result = conn.execute(
-        "UPDATE users SET password_hash = %s WHERE id = %s",
+        "UPDATE users SET password_hash = %s, must_change_password = true WHERE id = %s",
         (hash_password(data.password), inspector_id),
     )
     if result.rowcount == 0:

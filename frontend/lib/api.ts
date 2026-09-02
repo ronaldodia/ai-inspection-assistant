@@ -84,10 +84,24 @@ export const api = {
 
   finalize: (id: string) => request(`/api/inspections/${id}/finalize`, { method: 'POST' }).then((r) => r.json()),
 
-  getProfile: () => request('/api/auth/me').then((r) => r.json()),
+  getProfile: () =>
+    request('/api/auth/me')
+      .then((r) => r.json())
+      .then((profile) => {
+        // Garde le flag de la session synchronisé même hors du flux de login
+        // (ex. mdp réinitialisé par un admin pendant qu'une session est déjà ouverte).
+        useAuthStore.getState().setMustChangePassword(!!profile.must_change_password)
+        return profile
+      }),
 
   updateProfile: (data: { full_name: string; certification: string | null }) =>
     request('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }).then((r) => r.json()),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }).then((r) => r.json()),
 
   listInspectors: () => request('/api/admin/inspectors').then((r) => r.json()),
 

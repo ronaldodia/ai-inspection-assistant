@@ -15,6 +15,7 @@ interface Inspector {
   is_active: boolean
   max_inspections: number | null
   max_photos_per_inspection: number | null
+  must_change_password: boolean
   created_at: string
   inspection_count: number
   photo_count: number
@@ -321,6 +322,11 @@ export default function AdminPage() {
                         >
                           {i.is_active ? 'Actif' : 'Désactivé'}
                         </span>
+                        {i.must_change_password && (
+                          <span className="ml-1 text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                            Mdp à changer
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 pr-2">{i.inspection_count}</td>
                       <td className="py-2 pr-2">{i.photo_count}</td>
