@@ -20,9 +20,9 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      const { access_token } = await api.login(email, password)
-      setAuth(access_token, email)
-      router.push('/dashboard')
+      const { access_token, must_change_password } = await api.login(email, password)
+      setAuth(access_token, email, !!must_change_password)
+      router.push(must_change_password ? '/change-password' : '/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion')
     } finally {

@@ -20,7 +20,7 @@ def get_current_user(
     row = conn.execute(
         """
         SELECT id, email, full_name, certification, role, is_active,
-               max_inspections, max_photos_per_inspection
+               max_inspections, max_photos_per_inspection, must_change_password
         FROM users WHERE id = %s
         """,
         (user_id,),

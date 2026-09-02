@@ -9,6 +9,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    must_change_password: bool = False
 
 
 class DisclosureItem(BaseModel):
@@ -77,6 +78,11 @@ class UpdateSynthesisRequest(BaseModel):
 class UpdateProfileRequest(BaseModel):
     full_name: str
     certification: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
 
 
 class CreateInspectorRequest(BaseModel):

@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.db import get_conn
 from app.deps import get_current_user
 from app.limits import effective_inspection_limit, effective_photo_limit
-from app.schemas import LoginRequest, TokenResponse, UpdateProfileRequest
-from app.security import create_access_token, verify_password
+from app.schemas import ChangePasswordRequest, LoginRequest, TokenResponse, UpdateProfileRequest
+from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -13,14 +13,19 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest, conn: psycopg.Connection = Depends(get_conn)):
     row = conn.execute(
-        "SELECT id, password_hash, is_active FROM users WHERE email = %s", (data.email,)
+        "SELECT id, password_hash, is_active, must_change_password FROM users WHERE email = %s",
+        (data.email,),
     ).fetchone()
     if not row or not verify_password(data.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Identifiants invalides")
     if not row["is_active"]:
         raise HTTPException(status_code=403, detail="Compte désactivé")
     token = create_access_token(str(row["id"]))
-    return TokenResponse(access_token=token, token_type="bearer")
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        must_change_password=row["must_change_password"],
+    )
 
 
 @router.get("/me")
@@ -48,3 +53,23 @@ def update_profile(
     ).fetchone()
     conn.commit()
     return row
+
+
+@router.post("/change-password")
+def change_password(
+    data: ChangePasswordRequest,
+    user=Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    # Revérifie le mot de passe actuel même si l'appelant est déjà authentifié
+    # par token — sans ça, un token volé suffirait à verrouiller le vrai
+    # titulaire du compte hors de son propre mot de passe.
+    row = conn.execute("SELECT password_hash FROM users WHERE id = %s", (user["id"],)).fetchone()
+    if not row or not verify_password(data.current_password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
+    conn.execute(
+        "UPDATE users SET password_hash = %s, must_change_password = false WHERE id = %s",
+        (hash_password(data.new_password), user["id"]),
+    )
+    conn.commit()
+    return {"ok": True}
