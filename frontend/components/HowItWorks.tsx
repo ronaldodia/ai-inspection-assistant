@@ -7,7 +7,7 @@ const STEPS = [
     icon: '📷',
     title: 'Capturez',
     description:
-      'Prenez vos photos pendant la visite, même sans réseau — comble, vide sanitaire, fondation. Tout se synchronise dès que le signal revient.',
+      'Prenez vos photos pendant la visite, même sans réseau (comble, vide sanitaire, fondation). Tout se synchronise dès que le signal revient.',
   },
   {
     icon: '✨',
@@ -19,7 +19,7 @@ const STEPS = [
     icon: '✅',
     title: 'Révisez',
     description:
-      "Vous relisez, corrigez et complétez chaque constat avant qu'il ne quitte votre bureau — le rapport reste sous votre entière responsabilité.",
+      "Vous relisez, corrigez et complétez chaque constat avant qu'il ne quitte votre bureau : le rapport reste sous votre entière responsabilité.",
   },
   {
     icon: '📄',

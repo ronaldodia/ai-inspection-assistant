@@ -6,7 +6,7 @@ const FEATURES = [
   {
     title: 'Capture hors ligne',
     description:
-      "Les photos se prennent où qu'importe le signal — sous-sol, vide sanitaire — et se synchronisent automatiquement au retour du réseau.",
+      "Les photos se prennent où qu'importe le signal (sous-sol, vide sanitaire) et se synchronisent automatiquement au retour du réseau.",
   },
   {
     title: 'Vous gardez le dernier mot',
@@ -16,7 +16,7 @@ const FEATURES = [
   {
     title: 'Rapport prêt à remettre',
     description:
-      'Synthèse, points prioritaires, photos annotées et numéro de rapport unique — un document structuré, pas un fouillis de notes.',
+      'Synthèse, points prioritaires, photos annotées et numéro de rapport unique : un document structuré, pas un fouillis de notes.',
   },
 ]
 
@@ -46,7 +46,7 @@ export function LandingPage() {
             style={{ animationDelay: '120ms' }}
           >
             Capturez vos photos sur le terrain, laissez l&apos;analyse repérer les
-            anomalies visibles, puis révisez et générez un rapport professionnel —
+            anomalies visibles, puis révisez et générez un rapport professionnel,
             sans changer votre façon de travailler.
           </p>
           <div
@@ -82,7 +82,7 @@ export function LandingPage() {
       </main>
 
       <footer className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-stone-400">
-        <p>Inspect IA — outil interne d&apos;assistance à l&apos;inspection préachat.</p>
+        <p>Inspect IA, outil interne d&apos;assistance à l&apos;inspection préachat.</p>
         <p className="mt-2">
           Une question, un commentaire ?{' '}
           <a

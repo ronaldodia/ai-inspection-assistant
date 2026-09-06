@@ -147,13 +147,13 @@ export default function NewInspectionPage() {
           {disclosureItems.length > 0 && (
             <div className="mt-3 space-y-1">
               <p className="text-xs font-medium text-stone-500">
-                {disclosureItems.length} élément(s) extrait(s) — vérifiez avant de continuer :
+                {disclosureItems.length} élément(s) extrait(s), vérifiez avant de continuer :
               </p>
               {disclosureItems.map((item, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs bg-white rounded border border-stone-200 px-2 py-1.5">
                   <span className="flex-1">
                     <span className="font-medium">{sectionLabel(item.category)}</span>
-                    {' — '}
+                    {', '}
                     <span className="text-stone-500">{DISCLOSURE_TYPE_LABELS[item.type] ?? item.type}</span>
                     {' : '}
                     {item.description}
@@ -248,7 +248,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setWeatherConditions(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {WEATHER_CONDITIONS.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -291,7 +291,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setFloorCount(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {FLOOR_COUNTS.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -315,7 +315,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setFoundationType(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {FOUNDATION_TYPES.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -330,7 +330,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setHeatingType(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {HEATING_TYPES.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -355,7 +355,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setHasBasement(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {YES_NO_PARTIAL.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -370,7 +370,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setHasCrawlspace(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {YES_NO.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -385,7 +385,7 @@ export default function NewInspectionPage() {
                   onChange={(e) => setHasAttic(e.target.value)}
                   className="w-full rounded border border-stone-300 px-2 py-2 text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {YES_NO.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}

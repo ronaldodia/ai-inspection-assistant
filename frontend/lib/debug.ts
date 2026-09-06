@@ -4,6 +4,6 @@ export const DEBUG_MODE = process.env.NEXT_PUBLIC_DEBUG === 'true'
 
 export function describeError(err: unknown, fallback: string): string {
   if (!DEBUG_MODE) return fallback
-  if (err instanceof Error) return `${fallback} — [debug] ${err.name}: ${err.message}`
-  return `${fallback} — [debug] ${String(err)}`
+  if (err instanceof Error) return `${fallback} (debug : ${err.name}: ${err.message})`
+  return `${fallback} (debug : ${String(err)})`
 }

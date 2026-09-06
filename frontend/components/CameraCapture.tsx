@@ -102,7 +102,7 @@ export default function CameraCapture({
       const blob = await captureVideoFrame(video)
       await onCapture(blob)
     } catch (err) {
-      setShotError(err instanceof Error ? err.message : 'Photo non enregistrée — réessayez.')
+      setShotError(err instanceof Error ? err.message : 'Photo non enregistrée, réessayez.')
     } finally {
       setCapturing(false)
     }

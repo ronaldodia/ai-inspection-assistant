@@ -136,7 +136,7 @@ export default function ReviewPage() {
   return (
     <div className="min-h-screen bg-stone-50 pb-24">
       <header className="bg-white border-b border-stone-200 px-4 py-3">
-        <h1 className="font-semibold text-stone-900">Révision — {data.inspection.address}</h1>
+        <h1 className="font-semibold text-stone-900">Révision, {data.inspection.address}</h1>
         <p className="text-sm text-stone-500">
           Vérifiez les anomalies détectées avant de générer le rapport final.
         </p>
