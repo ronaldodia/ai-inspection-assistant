@@ -66,6 +66,17 @@ export default function LoginPage() {
           {loading ? 'Connexion...' : 'Se connecter'}
         </button>
       </form>
+      <p className="mt-4 text-sm text-stone-400">
+        Besoin d&apos;aide ?{' '}
+        <a
+          href="https://evoluops.com/contact/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-stone-500 hover:text-stone-700 underline"
+        >
+          Contactez-nous
+        </a>
+      </p>
     </div>
   )
 }
