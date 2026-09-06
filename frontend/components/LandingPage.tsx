@@ -82,7 +82,18 @@ export function LandingPage() {
       </main>
 
       <footer className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-stone-400">
-        Inspect IA — outil interne d&apos;assistance à l&apos;inspection préachat.
+        <p>Inspect IA — outil interne d&apos;assistance à l&apos;inspection préachat.</p>
+        <p className="mt-2">
+          Une question, un commentaire ?{' '}
+          <a
+            href="https://evoluops.com/contact/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-500 hover:text-stone-700 underline"
+          >
+            Contactez-nous
+          </a>
+        </p>
       </footer>
     </div>
   )
