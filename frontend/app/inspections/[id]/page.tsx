@@ -97,7 +97,7 @@ export default function InspectionStatusPage() {
             )}
             {connectionLost && (
               <p className="text-xs text-amber-600">
-                Connexion instable — nouvelle tentative en cours...
+                Connexion instable, nouvelle tentative en cours...
               </p>
             )}
           </>

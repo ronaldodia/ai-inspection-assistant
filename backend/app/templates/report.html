@@ -55,7 +55,7 @@
     {{ inspection.address }}<br>
     Date : {{ inspection.completed_at.strftime('%Y-%m-%d') if inspection.completed_at else '' }}<br>
     N° de rapport : {{ report_number }}<br>
-    Inspecteur : {{ inspector.full_name }}{% if inspector.certification %} — Certification : {{ inspector.certification }}{% endif %}
+    Inspecteur : {{ inspector.full_name }}{% if inspector.certification %}, Certification : {{ inspector.certification }}{% endif %}
   </div>
 
   <div class="context-grid notice">
@@ -124,7 +124,7 @@
     {% for item in priority_items %}
     <div class="priority-item {{ item.severity }}">
       <div class="sev sev-{{ item.severity }}">{{ severity_labels.get(item.severity, item.severity) }}</div>
-      <div class="type">{{ item.type }} — {{ item.section_label }}</div>
+      <div class="type">{{ item.type }} · {{ item.section_label }}</div>
       <div class="loc">{{ item.location }}</div>
       <p>{{ item.description }}</p>
     </div>
@@ -152,7 +152,7 @@
     {% for f in photo.anomalies %}
     <div class="finding">
       <div class="sev sev-{{ f.severity }}">{% if f.marker %}({{ loop.index }}) {% endif %}{{ severity_labels.get(f.severity, f.severity) }}</div>
-      <div class="type">{{ f.type }} — {{ f.location }}</div>
+      <div class="type">{{ f.type }} · {{ f.location }}</div>
       <p>{{ f.description }}</p>
       <p><strong>Recommandation :</strong> {{ f.recommendation }}</p>
     </div>
@@ -164,7 +164,7 @@
   {% endfor %}
 
   <div class="footer">
-    Document à des fins d'inspection préachat — ne remplace pas une expertise
+    Document à des fins d'inspection préachat. Ne remplace pas une expertise
     structurale complète en cas de doute.
   </div>
 </body>

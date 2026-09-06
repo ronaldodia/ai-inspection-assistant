@@ -198,7 +198,7 @@ export default function AdminPage() {
             <ul className="text-sm text-stone-600 space-y-1">
               {stats.top_inspectors.map((t) => (
                 <li key={t.id}>
-                  {t.full_name} ({t.email}) — {t.inspection_count} inspection(s)
+                  {t.full_name} ({t.email}), {t.inspection_count} inspection(s)
                 </li>
               ))}
             </ul>

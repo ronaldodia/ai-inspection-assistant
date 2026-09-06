@@ -20,7 +20,7 @@ import CameraCapture from '@/components/CameraCapture'
 
 // Repli historique : forcer l'ouverture de l'app caméra native via l'attribut
 // `capture` de l'input file, plutôt que de laisser un sélecteur de fichiers
-// classique. Désactivé par défaut — c'est précisément ce chemin qui tuait le
+// classique. Désactivé par défaut, c'est précisément ce chemin qui tuait le
 // processus Chrome en arrière-plan sur Android (pertes de photos
 // silencieuses). Remplacé par la caméra intégrée (getUserMedia, cf.
 // CameraCapture) : demander l'autorisation caméra est normal pour ce type
@@ -30,7 +30,7 @@ import CameraCapture from '@/components/CameraCapture'
 const ENABLE_NATIVE_CAMERA_INTENT = false
 
 // Posé dans sessionStorage juste avant d'ouvrir le sélecteur de fichiers,
-// effacé dès que `change` se déclenche sur la même instance de page — survit
+// effacé dès que `change` se déclenche sur la même instance de page, survit
 // donc à n'importe quel type de rechargement (contrairement à l'état
 // React/refs), y compris un kill de processus Android complet, pas seulement
 // le "tab discarding" interne à Chrome que document.wasDiscarded est seul à
@@ -42,7 +42,7 @@ function clearCapturePendingMarker() {
   try {
     sessionStorage.removeItem(CAPTURE_PENDING_KEY)
   } catch {
-    // sessionStorage indisponible (navigation privée, quota) — tant pis
+    // sessionStorage indisponible (navigation privée, quota), tant pis
   }
 }
 
@@ -63,7 +63,7 @@ export default function CapturePage() {
   const [error, setError] = useState<string | null>(null)
   const [photoLimit, setPhotoLimit] = useState<number | null>(null)
   const [storageInfo, setStorageInfo] = useState<string | null>(null)
-  // Force le remontage complet du <input type=file> à chaque capture — sur
+  // Force le remontage complet du <input type=file> à chaque capture, sur
   // certaines versions de Chrome Android, remettre .value = '' ne suffit pas
   // toujours à réinitialiser l'état interne du sélecteur caméra, qui reste
   // parfois "coincé" après un intent précédent et n'en relance aucun nouveau,
@@ -82,13 +82,13 @@ export default function CapturePage() {
   // l'intent caméra natif (cause confirmée des pertes de photos silencieuses).
   // cameraUnavailable passe à true dès le premier échec (permission refusée,
   // pas de caméra, timeout...) pour ne jamais redemander la permission en
-  // boucle — le bouton "Prendre une photo" reste alors grisé pour le reste de
+  // boucle, le bouton "Prendre une photo" reste alors grisé pour le reste de
   // la session, "Téléverser des photos" restant la solution de repli visible
   // et toujours disponible.
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraUnavailable, setCameraUnavailable] = useState(false)
   // Faux par défaut (y compris pendant le rendu serveur) puis mis à jour au
-  // montage — navigator n'existe pas côté serveur, et "Prendre une photo" ne
+  // montage, navigator n'existe pas côté serveur, et "Prendre une photo" ne
   // doit tout simplement pas exister sur desktop (pas de caméra arrière,
   // demander la permission caméra/géoloc pour ouvrir une webcam n'a pas de
   // sens ici) plutôt que d'être présent et grisé.
@@ -97,13 +97,13 @@ export default function CapturePage() {
     setIsMobile(isMobileDevice())
   }, [])
   // Un seul point GPS par session de capture caméra (pas d'EXIF possible sur
-  // une frame canvas) — suffisant, l'inspecteur ne change pas de pièce entre
+  // une frame canvas), suffisant, l'inspecteur ne change pas de pièce entre
   // deux prises consécutives, et ça évite de redemander la géoloc à chaque photo.
   const sessionGeoRef = useRef<{ lat: number | null; lon: number | null }>({ lat: null, lon: null })
 
   const logDebug = useCallback((msg: string) => {
     if (!DEBUG_MODE) return
-    const line = `${new Date().toISOString().slice(11, 23)} — ${msg}`
+    const line = `${new Date().toISOString().slice(11, 23)}, ${msg}`
     setDebugLog((prev) => [...prev.slice(-9), line])
   }, [])
 
@@ -121,7 +121,7 @@ export default function CapturePage() {
   // pertinent si ENABLE_NATIVE_CAMERA_INTENT est remis à true) :
   //
   // 1. Le marqueur sessionStorage posé au clic sur "Téléverser des photos" et
-  //    jamais effacé par le `change` correspondant — la seule preuve fiable
+  //    jamais effacé par le `change` correspondant, la seule preuve fiable
   //    sur Android, où ouvrir l'intent caméra tue quasi systématiquement tout
   //    le processus Chrome (pas juste "l'onglet mis en veille"), et où cette
   //    page-ci est alors détruite puis recréée de zéro, sans que `change` ne
@@ -129,34 +129,34 @@ export default function CapturePage() {
   //    survit à ce genre de rechargement, contrairement à l'état React/refs.
   // 2. document.wasDiscarded (Chrome), qui ne couvre que le "tab discarding"
   //    interne à Chrome (documenté pour desktop, support Android incertain)
-  //    — gardé en repli pour les cas hors capture où il se déclenche malgré
+  //   , gardé en repli pour les cas hors capture où il se déclenche malgré
   //    tout.
   //
   // Dans les deux cas : les photos déjà enregistrées restent intactes
   // (IndexedDB), seule la capture en vol au moment du rechargement disparaît
-  // — d'où l'avertissement plutôt qu'un blocage.
+  //, d'où l'avertissement plutôt qu'un blocage.
   useEffect(() => {
     let capturePending: { inspectionId: string } | null = null
     try {
       const raw = sessionStorage.getItem(CAPTURE_PENDING_KEY)
       if (raw) capturePending = JSON.parse(raw)
     } catch {
-      // sessionStorage indisponible ou marqueur corrompu — ignoré, pas grave
+      // sessionStorage indisponible ou marqueur corrompu, ignoré, pas grave
     }
     const discarded =
       typeof document !== 'undefined' && (document as Document & { wasDiscarded?: boolean }).wasDiscarded
 
     if (capturePending && capturePending.inspectionId === inspectionId) {
-      logDebug('sessionStorage: capture en attente jamais résolue — page relancée pendant la prise de vue')
+      logDebug('sessionStorage: capture en attente jamais résolue, page relancée pendant la prise de vue')
       setError(
         "⚠️ L'application a été relancée pendant la prise de photo (l'appareil photo a demandé trop de mémoire). " +
-          'Cette capture est perdue — vos photos déjà enregistrées sont intactes, reprenez simplement la dernière.'
+          'Cette capture est perdue, vos photos déjà enregistrées sont intactes, reprenez simplement la dernière.'
       )
     } else if (discarded) {
       logDebug('document.wasDiscarded = true')
       setError(
         "⚠️ Le navigateur a redémarré cette page automatiquement (mémoire faible de l'appareil). " +
-          'Vos photos déjà enregistrées sont intactes, mais la dernière capture en cours a pu être perdue — ' +
+          'Vos photos déjà enregistrées sont intactes, mais la dernière capture en cours a pu être perdue, ' +
           'vérifiez le nombre de photos ci-dessous et reprenez si besoin.'
       )
     }
@@ -166,7 +166,7 @@ export default function CapturePage() {
   // Filet de sécurité pour un intent caméra Android qui ne déclenche jamais
   // `change` (voir la discussion sur capture="environment") sans que l'onglet
   // ne soit tué (auquel cas document.wasDiscarded s'en charge déjà ci-dessus).
-  // On ne démarre le compte à rebours qu'au retour dans l'onglet — jamais
+  // On ne démarre le compte à rebours qu'au retour dans l'onglet, jamais
   // pendant que l'utilisateur cadre sa photo, ce qui évite les faux positifs
   // pour une prise de photo simplement lente.
   useEffect(() => {
@@ -177,7 +177,7 @@ export default function CapturePage() {
         if (!awaitingCaptureRef.current) return
         awaitingCaptureRef.current = false
         logDebug('watchdog: aucun change après retour dans l\'onglet')
-        setError("La capture n'a pas abouti — réessayez.")
+        setError("La capture n'a pas abouti, réessayez.")
       }, 1500)
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -190,7 +190,7 @@ export default function CapturePage() {
   // Filet de sécurité pour un intent caméra Android qui ne déclenche jamais
   // `change` (voir la discussion sur capture="environment") sans que l'onglet
   // ne soit tué (auquel cas document.wasDiscarded s'en charge déjà ci-dessus).
-  // On ne démarre le compte à rebours qu'au retour dans l'onglet — jamais
+  // On ne démarre le compte à rebours qu'au retour dans l'onglet, jamais
   // pendant que l'utilisateur cadre sa photo, ce qui évite les faux positifs
   // pour une prise de photo simplement lente.
   useEffect(() => {
@@ -201,7 +201,7 @@ export default function CapturePage() {
         if (!awaitingCaptureRef.current) return
         awaitingCaptureRef.current = false
         logDebug('watchdog: aucun change après retour dans l\'onglet')
-        setError("La capture n'a pas abouti — réessayez.")
+        setError("La capture n'a pas abouti, réessayez.")
       }, 1500)
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -212,7 +212,7 @@ export default function CapturePage() {
   }, [logDebug])
 
   // Quota IndexedDB dépassé = échec silencieux de savePhoto() sans exception
-  // franche selon le navigateur — visible seulement en debug, pour éviter
+  // franche selon le navigateur, visible seulement en debug, pour éviter
   // d'ajouter du bruit à l'écran des inspecteurs en prod.
   useEffect(() => {
     if (!DEBUG_MODE) return
@@ -221,7 +221,7 @@ export default function CapturePage() {
       .then((estimate) => {
         const usedMb = ((estimate.usage ?? 0) / 1024 / 1024).toFixed(1)
         const quotaMb = ((estimate.quota ?? 0) / 1024 / 1024).toFixed(1)
-        setStorageInfo(`${usedMb} Mo / ${quotaMb} Mo utilisés — IndexedDB: ${'indexedDB' in window}`)
+        setStorageInfo(`${usedMb} Mo / ${quotaMb} Mo utilisés, IndexedDB: ${'indexedDB' in window}`)
       })
       .catch((err) => setStorageInfo(describeError(err, 'estimation du stockage indisponible')))
   }, [photos])
@@ -256,7 +256,7 @@ export default function CapturePage() {
     try {
       // Trié par ordre de capture : en cas de limite atteinte, ce sont toujours
       // les photos les plus récentes qui échouent, jamais un sous-ensemble
-      // arbitraire — cohérent avec ce que "Supprimer les photos en trop" retire.
+      // arbitraire, cohérent avec ce que "Supprimer les photos en trop" retire.
       const pending = (await getAllPhotosForInspection(inspectionId))
         .filter((p) => !p.uploaded)
         .sort((a, b) => a.photoOrder - b.photoOrder)
@@ -312,10 +312,10 @@ export default function CapturePage() {
       // Chrome doit la relire depuis l'URI qu'il a fournie à l'appli caméra
       // (contrat ACTION_IMAGE_CAPTURE). Si cette relecture échoue (MediaStore
       // pas encore indexé, accès stockage en retard), change se déclenche
-      // quand même mais avec une liste vide — indiscernable JS d'une
+      // quand même mais avec une liste vide, indiscernable JS d'une
       // annulation volontaire, donc message neutre plutôt qu'alarmant.
       logDebug('handleFiles: liste vide (annulation ou échec de relecture caméra)')
-      setError("Aucune photo reçue — si vous veniez juste d'en prendre une, réessayez.")
+      setError("Aucune photo reçue, si vous veniez juste d'en prendre une, réessayez.")
       return
     }
     setError(null)
@@ -327,7 +327,7 @@ export default function CapturePage() {
       let index = 0
       for (const file of accepted) {
         try {
-          // L'EXIF doit être lu sur le fichier original — compressImage()
+          // L'EXIF doit être lu sur le fichier original, compressImage()
           // réencode via canvas et ne préserve aucune métadonnée.
           const [blob, exif] = await Promise.all([compressImage(file), readPhotoExif(file)])
           const clientPhotoId = crypto.randomUUID()
@@ -352,7 +352,7 @@ export default function CapturePage() {
       const rejectedCount = incoming.length - accepted.length
       if (rejectedCount > 0) {
         setError(
-          `Limite de ${photoLimit} photos atteinte pour cette inspection — ${rejectedCount} photo${
+          `Limite de ${photoLimit} photos atteinte pour cette inspection, ${rejectedCount} photo${
             rejectedCount > 1 ? 's' : ''
           } non ajoutée${rejectedCount > 1 ? 's' : ''}.`
         )
@@ -362,14 +362,14 @@ export default function CapturePage() {
     } catch (err) {
       // Filet de sécurité : sans ça, une erreur hors de la boucle par-photo
       // (ex. refreshPhotos() qui échoue, IndexedDB indisponible) ne remonte
-      // qu'en rejet de promesse non catché — invisible, aucune photo n'apparaît
+      // qu'en rejet de promesse non catché, invisible, aucune photo n'apparaît
       // et rien ne l'explique à l'écran.
       setError(describeError(err, "Erreur lors de l'ajout des photos"))
     }
   }
 
   // Alimentée par CameraCapture (une frame déjà redimensionnée/encodée par
-  // captureVideoFrame) — pas d'EXIF possible ici, donc takenAt = maintenant
+  // captureVideoFrame), pas d'EXIF possible ici, donc takenAt = maintenant
   // et lat/lon viennent de sessionGeoRef plutôt que d'un fichier.
   async function saveCapturedPhoto(blob: Blob) {
     if (photoLimit != null && photos.length >= photoLimit) {
@@ -397,7 +397,7 @@ export default function CapturePage() {
     }
   }
 
-  // Sélecteur de fichiers classique ("Téléverser des photos") — toujours
+  // Sélecteur de fichiers classique ("Téléverser des photos"), toujours
   // disponible, indépendamment de l'état de la permission caméra. N'ouvre
   // l'app caméra native que si ENABLE_NATIVE_CAMERA_INTENT est remis à true ;
   // sinon c'est un simple accès à la pellicule/aux fichiers existants.
@@ -408,7 +408,7 @@ export default function CapturePage() {
     try {
       sessionStorage.setItem(CAPTURE_PENDING_KEY, JSON.stringify({ inspectionId }))
     } catch {
-      // sessionStorage indisponible — le check au montage n'aura simplement
+      // sessionStorage indisponible, le check au montage n'aura simplement
       // rien à détecter, pas de risque d'erreur ici
     }
     fileInputRef.current?.click()
@@ -429,7 +429,7 @@ export default function CapturePage() {
   // dialogue système...). Contrairement à avant, on ne retombe plus en douce
   // sur l'app caméra native : demander l'autorisation caméra est un
   // comportement normal pour ce type d'app, donc un refus doit rester
-  // visible — le bouton "Prendre une photo" se grise, "Téléverser des
+  // visible, le bouton "Prendre une photo" se grise, "Téléverser des
   // photos" reste l'alternative explicite.
   function handleCameraUnavailable() {
     setCameraOpen(false)
@@ -441,7 +441,7 @@ export default function CapturePage() {
     const photo = photos.find((p) => p.clientPhotoId === clientPhotoId)
     if (photo?.uploaded && photo.serverId) {
       // Déjà synchronisée : la retirer côté serveur d'abord (fichier +
-      // ligne en base) — sinon elle reste comptée et analysée par l'IA
+      // ligne en base), sinon elle reste comptée et analysée par l'IA
       // même après avoir disparu de cet écran.
       try {
         await api.deletePhoto(inspectionId, photo.serverId)
@@ -511,7 +511,7 @@ export default function CapturePage() {
       <main className="max-w-lg mx-auto p-4 space-y-4">
         {DEBUG_MODE && (
           <div className="rounded-lg border border-purple-300 bg-purple-50 p-3 text-xs text-purple-900 font-mono space-y-1">
-            <p>🐛 DEBUG — inspectionId: {inspectionId}</p>
+            <p>🐛 DEBUG, inspectionId: {inspectionId}</p>
             <p>{storageInfo ?? 'estimation du stockage…'}</p>
             <p>photos locales: {photos.length} (uploadées: {photos.filter((p) => p.uploaded).length})</p>
             <div className="border-t border-purple-200 pt-1 mt-1">
@@ -525,7 +525,7 @@ export default function CapturePage() {
         )}
         {!online && (
           <div className="rounded-lg border border-stone-300 bg-stone-100 p-3 text-sm text-stone-700">
-            📴 Hors ligne — vous pouvez continuer à ajouter des photos normalement,
+            📴 Hors ligne, vous pouvez continuer à ajouter des photos normalement,
             mais évitez de rafraîchir la page ou d&apos;utiliser le bouton
             « précédent » du navigateur : cette page précise ne peut se recharger
             que si elle a déjà été visitée en ligne.
@@ -535,7 +535,7 @@ export default function CapturePage() {
         <p className="text-sm text-stone-600">
           {photos.length} photo{photos.length !== 1 ? 's' : ''}
           {photoLimit != null && ` / ${photoLimit}`} capturée{photos.length !== 1 ? 's' : ''}
-          {pendingCount > 0 && ` — ${pendingCount} en attente de synchronisation`}
+          {pendingCount > 0 && `, ${pendingCount} en attente de synchronisation`}
         </p>
 
         {excessCount > 0 && (
@@ -596,7 +596,7 @@ export default function CapturePage() {
             )}
           </datalist>
           <p className="text-xs text-stone-500 mt-1">
-            Aide l&apos;IA à savoir où elle regarde dans le bâtiment — un mot ou deux suffisent.
+            Aide l&apos;IA à savoir où elle regarde dans le bâtiment, un mot ou deux suffisent.
           </p>
         </div>
 
@@ -606,7 +606,7 @@ export default function CapturePage() {
           type="file"
           accept="image/*"
           // capture="environment" seulement si ENABLE_NATIVE_CAMERA_INTENT
-          // est remis à true (voir ce flag en tête de fichier) — par défaut
+          // est remis à true (voir ce flag en tête de fichier), par défaut
           // ce champ est un simple sélecteur de fichiers/pellicule, plus
           // question de forcer l'app caméra native depuis ici.
           {...(ENABLE_NATIVE_CAMERA_INTENT ? { capture: 'environment' as const } : {})}
@@ -622,7 +622,7 @@ export default function CapturePage() {
             handleFiles(e.target.files).catch((err) =>
               setError(describeError(err, "Erreur lors de l'ajout des photos"))
             )
-            // Remonte un input tout neuf pour la prochaine capture — sur
+            // Remonte un input tout neuf pour la prochaine capture, sur
             // certaines versions de Chrome Android, .value = '' ne suffit pas
             // toujours à réarmer le sélecteur caméra, qui reste "coincé" après
             // un intent précédent et n'en relance aucun nouveau, sans la
@@ -646,12 +646,12 @@ export default function CapturePage() {
                     {limitReached
                       ? `Limite de ${photoLimit} photos atteinte`
                       : cameraUnavailable
-                        ? '📷 Caméra indisponible — voir ci-dessous'
+                        ? '📷 Caméra indisponible, voir ci-dessous'
                         : '📷 Prendre une photo'}
                   </button>
                   {cameraUnavailable && (
                     <p className="text-xs text-stone-500">
-                      Autorisation caméra refusée ou indisponible sur cet appareil — utilisez «
+                      Autorisation caméra refusée ou indisponible sur cet appareil, utilisez «
                       Téléverser des photos » pour ajouter des photos déjà prises.
                     </p>
                   )}
